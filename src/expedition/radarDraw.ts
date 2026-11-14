@@ -5,8 +5,8 @@
 // home: on the rim when the return point is out of range (pulsing when fuel is short), a ring on it when in range.
 // Keith 2026-11-01: the scope about twice the size (radarSize), the convoy bright cyan with a ring and a label (a
 // cyan bar on the rim when it's off the scope), mission targets bright green, bigger and ringed, distance always shown.
-// Keith 2026-11-14 ("too many glowing icons, hard to read"): enemies only inside the mech's sensor range (a faint ring
-// shows where that is on the convoy's scope), heat blobs and glows toned down (radarHeatAlpha, radarBloom), and the
+// Keith 2026-11-14 ("too many glowing icons, hard to read"): enemies only inside the mech's sensor range (no ring:
+// the convoy's scope is only up aboard), heat blobs and glows toned down (radarHeatAlpha, radarBloom), and the
 // POIs as clear steady marks with a dark edge: small diamonds for tier 1, bigger gold ones for tier 2-4, a square with
 // its name for the fortresses and hubs; grey when stripped.
 import { POI_KINDS, type PoiKind } from "../world/pois";
@@ -172,11 +172,6 @@ export class RadarDraw {
       const [x, y] = at(pic.edge.x, pic.edge.z);
       ctx.setLineDash([2, 5]); ctx.strokeStyle = "rgba(159, 227, 208, 0.4)"; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(x, y, pic.edge.r * scale, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-    }
-    // How far the mech's sensors see enemies: a faint ring when it sits inside the scope.
-    if (pic.sense && pic.sense * scale < R - 6) {
-      ctx.strokeStyle = "rgba(255, 150, 110, 0.28)"; ctx.lineWidth = 1; ctx.setLineDash([1, 4]);
-      ctx.beginPath(); ctx.arc(c, c, pic.sense * scale, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
     }
     // Home: a ring on the point when it's in range.
     const pulse = warn ? 0.6 + 0.4 * Math.sin(this.time * (warn === 2 ? 12 : 7)) : 1;

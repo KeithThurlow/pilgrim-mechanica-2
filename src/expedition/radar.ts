@@ -11,6 +11,9 @@
 // the mech's own sensor range (mechRadar, from the fitted sensor, × radarEnemySense), on both scopes; past it the scope
 // shows POIs, pads, contracts, the road and the convoy. radarAllEnemies 1 brings back the old picture (camps as heat
 // on the convoy radar, danger glowing on the mech radar's rim).
+// Keith 2026-11-14 (later): the convoy radar is on only while the mech is aboard the convoy (convoyRadarAboard 1); out
+// on the sand it is always the mech's own scope, and no sensor-range ring is drawn ("weird when there's a range for the
+// player that changes"). convoyRadarAboard 0 brings back the range edge (convoyLink).
 // Crossing the link edge zooms between them over radarZoom seconds (RadarZoom: eased in log scale, an event for the
 // sound). The picture is in world offsets from the mech (x, z); the drawer turns it to screen-up.
 import type { Param } from "../core/tweaks";
@@ -30,6 +33,7 @@ export const RADAR_DEFAULTS = {
   blobGrow: 22,
   blobHot: 30,
   radarEnemySense: 1,
+  convoyRadarAboard: 1,
   radarAllEnemies: 0,
   radarHeatAlpha: 0.45,
   radarBloom: 0.3,
@@ -49,6 +53,7 @@ export const RADAR_PARAMS: Param[] = [
   { key: "radarHz", label: "Scope redraws per second", min: 10, max: 144, step: 1, group: G, tip: "The scope is a 2D canvas drawn on the CPU; 30 looks the same as every frame at a fraction of the cost (perf pass 2026-10-31)" },
   { key: "blobBase", label: "Heat blob size (m)", min: 5, max: 200, step: 1, group: G, tip: "A swarm's heat blob on the convoy radar: this plus the growth below" },
   { key: "blobGrow", label: "Blob growth (m per √robot)", min: 0, max: 60, step: 0.5, group: G },
+  { key: "convoyRadarAboard", label: "Convoy radar only aboard", min: 0, max: 1, step: 1, group: G, tip: "1: the convoy's big scope only while the mech is on the convoy; out on the sand it's always the mech's own. 0: the old range edge (Convoy range edge)" },
   { key: "radarEnemySense", label: "Enemies seen out to (× mech radar)", min: 0.2, max: 3, step: 0.05, group: G, tip: "Enemies show on either scope only this close to the mech, as a share of its sensor's radar range (Keith 2026-11-14: the convoy's map shows points of interest, not enemies)" },
   { key: "radarAllEnemies", label: "Show all enemies (old scope)", min: 0, max: 1, step: 1, group: G, tip: "1: the old picture, every camp as heat on the convoy radar and danger glowing on the mech radar's rim" },
   { key: "radarHeatAlpha", label: "Heat blob strength", min: 0.05, max: 1.5, step: 0.05, group: G, tip: "How strongly enemy heat blobs glow (was 1)" },
@@ -107,8 +112,6 @@ export interface RadarPicture {
   seek?: SeekTarget | null;
   /** Contract and HVT diamonds, offset from the mech, with their distance. */
   quests?: { x: number; z: number; dist: number; color: string; kind?: "contract" | "hvt" }[];
-  /** How far round the mech enemies show (m); drawn as a faint ring when it is inside the scope. */
-  sense?: number;
   /** The convoy's nearest car, wherever it is (the scope pins a marker to the rim when it's off it). */
   convoyAt?: { x: number; z: number; dist: number } | null;
 }
@@ -120,8 +123,8 @@ export function convoyDistance(w: RadarWorld): { d: number; i: number } {
   return { d, i };
 }
 
-/** Is the mech inside the convoy's range edge (aboard counts)? */
-export function linked(v: RadarValues, w: RadarWorld, aboard: boolean) { return aboard || convoyDistance(w).d <= v.convoyLink; }
+/** Does the mech get the convoy's scope: aboard, or (convoyRadarAboard 0) inside the convoy's range edge? */
+export function linked(v: RadarValues, w: RadarWorld, aboard: boolean) { return aboard || (v.convoyRadarAboard < 0.5 && convoyDistance(w).d <= v.convoyLink); }
 
 /** The scope's content for a mode. */
 export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): RadarPicture {
@@ -143,7 +146,6 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
   const all = v.radarAllEnemies >= 0.5;
   const sense = v.mechRadar * v.radarEnemySense;
   const sensed = (x: number, z: number, r = 0) => Math.hypot(x - mx, z - mz) <= sense + r;
-  pic.sense = all ? undefined : sense;
   const poiBlip = (p: RadarWorld["pois"][number]): Blip => ({ id: p.id, x: p.x - mx, z: p.z - mz, kind: "poi", tier: p.tier, size: p.tier, stripped: p.stripped, label: p.kind });
   if (mode === "convoy") {
     for (const p of w.pois) if (near(p.x, p.z) && covered(p.x, p.z) && !inFog(p.x, p.z)) pic.blips.push(poiBlip(p));
@@ -157,7 +159,7 @@ export function radarPicture(v: RadarValues, w: RadarWorld, mode: RadarMode): Ra
     for (const u of w.unknown) if (near(u.x, u.z, u.r)) pic.fog.push({ x: u.x - mx, z: u.z - mz, r: u.r });
     for (const p of w.route) pic.route.push({ x: p.x - mx, z: p.z - mz });
     if (w.band && w.rings && w.rings.length) pic.band = { pts: w.band.map((p) => ({ x: p.x - mx, z: p.z - mz })), rings: [...w.rings].sort((a, b) => b - a) };
-    if (cc) pic.edge = { x: cc.x - mx, z: cc.z - mz, r: v.convoyLink };
+    if (cc && v.convoyRadarAboard < 0.5) pic.edge = { x: cc.x - mx, z: cc.z - mz, r: v.convoyLink };
   } else {
     for (const p of w.pois) if (near(p.x, p.z)) pic.blips.push(poiBlip(p));
     for (const c of w.contacts) if (near(c.x, c.z) && (all || sensed(c.x, c.z))) pic.blips.push(robotBlip(c, mx, mz));
