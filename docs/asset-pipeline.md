@@ -120,8 +120,8 @@ each with a what-to-play list.
 | 2 | The contract check (`assets-check`) and inventory pictures from models | Keith asked; works on today's models and improves as they do |
 | 3 | Inventory layout and UI | Keith: free rein; own PR |
 | 4 | Arms ×3, sensors ×5, waist kit ×3 | Finishes the mech: no boxes left on it |
-| 5 | Robots: scrapper, cutter, excavator, quads; drones and the scrap swarm | The plainest thing in every fight |
-| 6 | Swords ×3, feeds and capacitor, drone rack, hive, replica bay | Items with boxes or nothing |
+| 5 | Swords ×3, feeds and capacitor, drone rack, hive | Items with boxes or nothing (moved ahead of the robots 2026-11-14) |
+| 6 | Robots: scrapper, cutter, excavator, quads; drones and the scrap swarm | Already designed in code to Keith's notes: rebuild with the robot reference art to hand |
 | 7 | Crusher, strider | Hero enemies |
 | 8 | War band vehicles and escorts | |
 | 9 | Second pass on the TS-kit weapons; flamers and freeze rays | B to A |
