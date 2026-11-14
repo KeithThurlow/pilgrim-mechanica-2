@@ -41,7 +41,10 @@ export interface WeaponModel {
   clip?: import("./magazine").Mag | null;
   /** The sword: the group that swings (yaw: the swing's angle, pitch: its lift), the blade inside it (stretched along
    *  +Z to the reach) and the hot edge. */
-  sword?: { swing: THREE.Group; blade: THREE.Group; edge: THREE.MeshBasicMaterial };
+  sword?: { swing: THREE.Group; blade: THREE.Group; edge: THREE.MeshBasicMaterial; /** The heft its blade is built
+   *  at (a GLB's: its base's; the boxes 1): the arsenal scales the blade by the rolled heft over this. */ heft?: number };
+  /** The item base whose GLB this model shows (src/weapons/partSwap.ts), when it's picked by base. */
+  base?: string;
   /** A hull gun's bridge to the hull (the cryo projector): a group reaching inboard (x) from `from` m off the gun's
    *  axis, built `reach` m long; the arsenal stretches it to the hull wherever the gun sits out. */
   bridge?: { g: THREE.Group; from: number; reach: number };

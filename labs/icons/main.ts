@@ -64,6 +64,9 @@ function weaponKind(b: Base): ModelKind | null {
 async function build(b: Base): Promise<THREE.Object3D | null> {
   switch (b.kind) {
     case "weapon": case "shoulder": {
+      // A model built for the base itself (swords, shoulder gear, the summoner shoulders: tools/blender/parts/items.py).
+      const own = await partGlb(b.id);
+      if (own) return partFromGlb(own, toon);
       const mk = weaponKind(b);
       if (mk) return WEAPON_MODELS[mk](toon, "right").root;
       if (b.kind === "weapon" && (b.cls === undefined || (b.cls as string) === "minigun")) {
