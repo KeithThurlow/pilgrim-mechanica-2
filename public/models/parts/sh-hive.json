@@ -1,0 +1,27 @@
+{
+ "id": "sh-hive",
+ "kind": "shoulder",
+ "name": "Swarm hive",
+ "maker": "Suzaku",
+ "says": "hex nest, glowing honeycomb face",
+ "tris": 600,
+ "meshes": 2,
+ "size": [
+  0.79,
+  1.203,
+  1.033
+ ],
+ "min": [
+  -0.395,
+  0.0,
+  -0.6634
+ ],
+ "max": [
+  0.395,
+  1.2033,
+  0.37
+ ],
+ "sockets": {},
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}
