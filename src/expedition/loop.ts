@@ -605,12 +605,13 @@ export class ExpeditionLoop {
       w.band = []; w.rings = v.depthRings > 0 ? [v.depthNear, v.depthOut, v.depthDeep] : [];
       if (w.rings.length) for (let s = -v.convoyRadar * 1.6; s <= v.convoyRadar * 1.6; s += 100) { this.route.ahead(head + s, out); w.band.push({ x: out.x, z: out.z }); }
     }
-    this.swarms.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.droids.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.striders.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    this.crushers.contacts(p.x, p.z, v.mechRadar * 1.1, w.contacts);
-    for (const c of this.banditCamps.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
-    for (const c of this.bands.contacts(p.x, p.z, v.mechRadar * 1.1, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
+    const sr = v.mechRadar * Math.max(1.1, v.radarEnemySense * 1.05);
+    this.swarms.contacts(p.x, p.z, sr, w.contacts);
+    this.droids.contacts(p.x, p.z, sr, w.contacts);
+    this.striders.contacts(p.x, p.z, sr, w.contacts);
+    this.crushers.contacts(p.x, p.z, sr, w.contacts);
+    for (const c of this.banditCamps.contacts(p.x, p.z, sr, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 1e9, faction: 1 });
+    for (const c of this.bands.contacts(p.x, p.z, sr, this.humanContacts.splice(0))) w.contacts.push({ ...c, id: c.id + 2e9, faction: 1 });
     // Moving danger as heat: packs and raids (hotter hunting), and blasts for a few seconds.
     const heat = (w.heat ??= []);
     heat.length = 0;
