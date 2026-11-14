@@ -166,7 +166,18 @@ export class DuneField {
   wind(): [number, number] { return [this.c, this.s]; }
 
   private hs: GroundSample = { h: 0, crest: 0, flat: 0 };
-  height(x: number, z: number): number { return this.sample(x, z, this.hs).h; }
+  /**
+   * Optional: heights read back from a grid of exact nodes (src/world/groundGrid.ts), for labs where the modifiers
+   * make every read dear. Used only while gridReads is on: a reader that asks for the same few metres of ground over
+   * and over (a mech's legs) turns it on round its own step. Everything else, and everything the sim worker mirrors
+   * (the convoy, craters, escorts), works every read out, so the two threads' grounds stay the same.
+   */
+  grid: { height(x: number, z: number): number } | null = null;
+  gridReads = false;
+  /** The ground's height: worked out, or the grid's (exact on its nodes, bilinear between) while gridReads is on. */
+  height(x: number, z: number): number { return this.gridReads && this.grid ? this.grid.height(x, z) : this.sample(x, z, this.hs).h; }
+  /** The ground's height worked out here and now, whatever the grid remembers. */
+  heightExact(x: number, z: number): number { return this.sample(x, z, this.hs).h; }
 
   /**
    * The ground at (x, z). raw: the ground before the modifier and the dents (the dunes as they were before the

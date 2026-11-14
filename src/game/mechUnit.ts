@@ -460,7 +460,10 @@ export class MechUnit implements Hittable, Solid {
       const wasDashing = sim.inDash;
       // Where the guns are aimed (none: the legs always turn to the travel; a torso with nothing to aim at follows them).
       move.face = cmd.face ?? (aim ? Math.atan2(aim.x - sim.pos.x, aim.z - sim.pos.z) : undefined);
-      sim.update(dt / sub, move);
+      // The legs read the same few metres of ground again and again: from the field's grid, where it has one.
+      const fld = this.bf.field, was = fld.gridReads;
+      fld.gridReads = true;
+      try { sim.update(dt / sub, move); } finally { fld.gridReads = was; }
       // Its steps and burst done (2026-10-31: the burst, not just the steps), the shove is over too: it times the damage
       // cut and the crowd shove through the whole burst.
       if (wasDashing && !sim.inDash) dash.cut();
