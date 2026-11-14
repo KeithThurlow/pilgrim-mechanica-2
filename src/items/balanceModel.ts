@@ -37,7 +37,9 @@ export const REF = {
   budget: 150,
   /** Budget share by slot: Light on one mount (the arm adds arc, tracking, salvage), Heavy both mounts, a shoulder
    *  launcher extra on top of the mounts (keyed, cooldown). */
-  slotShare: { L: 0.9, M: 1, H: 1.9, shoulder: 0.5 } as Record<string, number>,
+  // Shoulders 0.5 → 0.9 (Keith 2026-11-14: "they need to feel really strong ... pump their numbers"): a shoulder
+  // launcher is now nearly a second mount's worth on top of the mounts.
+  slotShare: { L: 0.9, M: 1, H: 1.9, shoulder: 0.9 } as Record<string, number>,
   /** Budget weight per target set: area weapons should take about twice the hp per second out of a camp-density swarm
    *  that a single-target gun takes out of one body. */
   setWeight: { swarm: 2, cutter: 1, excavator: 1, raider: 1, rival: 1 } as Record<string, number>,

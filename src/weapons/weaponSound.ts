@@ -56,6 +56,22 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   }), () => v.blastLevel);
   // The big blast's sub boom: a deep falling sine and a low push of air, short, no ring.
   sfx.addSound("blastBoom", variants(3, 53, (r) => S.mix(S.thump(0.6, 62 + r() * 8, 28, 0.9), S.lowPass(S.noise(r, 0.4, 160, 0.8, 0.004), 220))), () => v.blastLevel);
+  // Shoulder strikes (Keith 2026-11-14, src/weapons/strikes.ts). The charge: a rising whine and crackle, played faster
+  // or slower per strike. The quake's slam: a huge low thump, a crack of metal and a long dark rumble. The orbital
+  // lance: a roaring, sizzling column (bright crackle over a low drone) for its 2.4 s. The cryo bomb: a sharp hiss and
+  // a glassy shatter. The singularity: a deep wobbling drone that bends down. The beacon's beeps and the shells'
+  // falling whistle.
+  const lvl = () => blastSafe(v) * v.strikeLevel;
+  sfx.addSound("strikeCharge", variants(1, 70, (r) => S.mix(S.whine(1.0, 120, 1600, 0.2), S.whine(1.0, 240, 3200, 0.06), S.scale(S.crackle(r, 1.0, 0.2), 0.8))), () => v.strikeLevel * 0.5);
+  sfx.addSound("quakeSlam", variants(2, 71, (r) => S.mix(S.thump(0.8, 70, 24, 1.0), S.clang(r, 0.25, 0.45), S.lowPass(S.noise(r, 0.5, 700, 0.9, 0.002), 900),
+    S.delay(S.lowPass(S.band(r, 1.8, 25, 120, 0.8, 0.05, -12), 160), 0.05), S.delay(S.crackle(r, 0.6, 0.25), 0.05))), lvl);
+  sfx.addSound("orbitalBeam", variants(1, 72, (r) => S.mix(S.scale(S.crackle(r, 2.6, 0.35), 0.9), S.lowPass(S.band(r, 2.6, 40, 220, 0.7, 0.05, -1.5), 300),
+    S.whine(2.6, 900, 700, 0.07), S.noise(r, 2.6, 5200, 0.25, 0.05))), lvl);
+  sfx.addSound("stasisBurst", variants(2, 73, (r) => S.mix(S.noise(r, 0.7, 7000, 0.7, 0.001), S.whine(0.5, 2600, 400, 0.15), S.delay(S.crackle(r, 0.6, 0.4), 0.04),
+    S.thump(0.4, 110, 40, 0.6))), lvl);
+  sfx.addSound("gravityHum", variants(1, 74, (r) => S.mix(S.growl(r, 3.0, 18, 46), S.whine(3.0, 160, 55, 0.2), S.lowPass(S.band(r, 3.0, 30, 90, 0.5, 0.3, -2), 140))), lvl);
+  sfx.addSound("beacon", variants(1, 75, () => S.mix(S.whine(0.08, 1800, 1800, 0.3), S.delay(S.whine(0.08, 1800, 1800, 0.3), 0.18), S.delay(S.whine(0.12, 2400, 2400, 0.3), 0.36))), () => v.strikeLevel * 0.35);
+  sfx.addSound("shellWhistle", variants(3, 76, (r) => S.mix(S.whine(1.1, 2200 + r() * 400, 700, 0.12), S.noise(r, 1.1, 3000, 0.08, 0.3))), () => v.strikeLevel * 0.45);
   sfx.addSound("mortar", variants(2, 45, (r) => S.mix(S.thump(0.3, 150, 55, 1.0), S.noise(r, 0.25, 1100, 0.5, 0.001), S.clang(r, 0.12, 0.12))), () => v.mortarLevel);
   // A rocket clip's swap (Keith 2026-10-31: a reload you can hear): the empty clip unlatching and dropping (a clank and a
   // short servo slide), then the full one seating (a heavy clunk with a latch tick).
@@ -230,3 +246,6 @@ function crunch(S: Synth, r: () => number, len: number, gain: number, bright: nu
   }
   return s;
 }
+
+/** The blast level, never below a whisper (a strike's sounds follow it). */
+function blastSafe(v: WeaponValues) { return Math.max(0.2, v.blastLevel * 0.5); }

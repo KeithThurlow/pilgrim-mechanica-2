@@ -430,7 +430,7 @@ const dt = 1 / 120;
     must(!sw.fire(30, 40, st, enemies, flat), "a missile pod fired in its cooldown");
     const hits: { x: number; z: number; key: unknown }[] = [];
     for (let i = 0; i < 120 * 6; i++) sw.update(dt, flat, (_i, out) => { out.x = 0; out.y = 5; out.z = 0; }, () => null, (m) => hits.push({ x: m.pos.x, z: m.pos.z, key: m.key }));
-    must(hits.length >= 8 && hits.length <= 12, `${hits.length} missile blasts (want 8-12)`);
+    must(Math.abs(hits.length - st.missiles) <= 2, `${hits.length} missile blasts (want ${st.missiles - 2}-${st.missiles + 2})`);
     must(hits.every((h) => Math.hypot(h.x - 30, h.z - 40) <= st.radius + 0.01), "a missile came down outside the swarm's reach");
     if (enemies.length) must(hits.every((h) => h.key === "a" || h.key === "b"), "a missile went for an enemy out of reach (or none)");
   }
@@ -660,7 +660,8 @@ const dt = 1 / 120;
   const before = dash.energy;
   const cg = new GearSim(cap);
   must(cg.press(), "the capacitor's key didn't fire");
-  dash.refillNow(cap.bars);
+  must(cap.bars === V.capBars, "the capacitor's key refills other than its slider's bars");
+  dash.refillNow(1);
   must(dash.bars[1] === 1 && dash.bars[2] === 0 && Math.abs(dash.energy - (before + 0.6)) < 1e-9, `a one-bar discharge left bars ${dash.bars.map((b) => b.toFixed(2)).join(" ")}`);
   dash.refillNow(9);
   must(dash.bars.every((b) => b === 1), "a big discharge didn't fill every bar");

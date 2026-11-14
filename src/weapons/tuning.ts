@@ -14,6 +14,7 @@ import { CANNON_DEFAULTS, CANNON_PARAMS, CANNON_GROUP } from "./cannon";
 import { SAMPLE_DEFAULTS, SAMPLE_PARAMS } from "../audio/samples";
 import { FIRE_DEFAULTS, FIRE_PARAMS, FIRE_GROUPS } from "./fire/fireTuning";
 import { DAMAGE_TYPE_DEFAULTS, DAMAGE_TYPE_PARAMS, DAMAGE_TYPE_GROUP } from "../game/damageType";
+import { STRIKE_DEFAULTS, STRIKE_PARAMS, STRIKE_GROUPS } from "./strikes";
 
 export const WEAPON_DEFAULTS = {
   // Painter
@@ -23,7 +24,7 @@ export const WEAPON_DEFAULTS = {
   beamWidth: 0.09,
   beamGlow: 1,
   // Line mortar (step 1's line salvo: shells lobbed in order up a painted strip)
-  salvoRockets: 14,
+  salvoRockets: 18,
   salvoLength: 52,
   salvoWidth: 11,
   salvoMinRange: 8,
@@ -35,7 +36,7 @@ export const WEAPON_DEFAULTS = {
   salvoArc: 9,
   salvoScatter: 0.25,
   salvoBlast: 5.5,
-  salvoDamage: 110,
+  salvoDamage: 150,
   salvoCooldown: 4,
   salvoSnap: 0.8,
   salvoSnapReach: 5,
@@ -71,7 +72,7 @@ export const WEAPON_DEFAULTS = {
   mortarShells: 1,
   mortarRing: 1.5,
   mortarBlast: 14,
-  mortarDamage: 650,
+  mortarDamage: 1100,
   mortarFlight: 2.2,
   mortarArc: 22,
   mortarClear: 3,
@@ -100,7 +101,7 @@ export const WEAPON_DEFAULTS = {
   // visible clip swap; each rocket hits harder so the sustained DPS holds (balance sheet: hull 146 -> 145).
   rpgMag: 4,
   rpgReload: 8,
-  rpgShoulderMag: 3,
+  rpgShoulderMag: 4,
   rpgShoulderReload: 9,
   /** A part-used clip is swapped after this long with the trigger off (0: only once empty). */
   rocketTopUp: 2.5,
@@ -110,6 +111,9 @@ export const WEAPON_DEFAULTS = {
   rpgBlast: 4.5,
   rpgCooldown: 0.45,
   rpgShoulderCooldown: 1,
+  // Shoulder rockets hit harder than the hull launcher's (Keith 2026-11-14: "pump their numbers").
+  rpgShoulderDamage: 1.6,
+  rpgShoulderBlast: 1.35,
   rpgRange: 70,
   rpgSmoke: 1,
   /** The rocket in flight: body length (m) and its exhaust flare's size (Keith 2026-10-31: rockets, not cruise missiles). */
@@ -129,9 +133,9 @@ export const WEAPON_DEFAULTS = {
   /** Share of walking speed lost while it channels. */
   podSlow: 0.3,
   // Missile pod (shoulder)
-  swarmMissiles: 10,
-  swarmDamage: 60,
-  swarmBlast: 2.2,
+  swarmMissiles: 16,
+  swarmDamage: 90,
+  swarmBlast: 2.8,
   swarmRadius: 8,
   swarmCooldown: 8,
   swarmRipple: 0.06,
@@ -142,19 +146,19 @@ export const WEAPON_DEFAULTS = {
   // Shoulder gear (Keith 2026-10-30): feeds boost their own side's gun, power feeds the energy bars; each has a key.
   beltRate: 0.12,
   beltSpin: 0.25,
-  beltBoost: 0.6,
-  beltTime: 4,
-  beltCooldown: 20,
+  beltBoost: 1.0,
+  beltTime: 6,
+  beltCooldown: 16,
   incRate: 0.05,
   incAmmo: 0.15,
-  incTime: 6,
+  incTime: 8,
   incCooldown: 18,
   burnTime: 3,
-  burnDps: 14,
+  burnDps: 26,
   capRefill: 0.3,
-  capBars: 1,
+  capBars: 2,
   capCapacity: 1.5,
-  capCooldown: 25,
+  capCooldown: 20,
   burnTick: 0.25,
   burnMax: 192,
   burnFlames: 1,
@@ -204,6 +208,7 @@ export const WEAPON_DEFAULTS = {
   ...FIRE_DEFAULTS,
   ...DAMAGE_TYPE_DEFAULTS,
   ...SAMPLE_DEFAULTS,
+  ...STRIKE_DEFAULTS,
 };
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
@@ -291,6 +296,8 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "rpgBlast", label: "Blast radius (m)", min: 0.5, max: 12, step: 0.1, group: RPG },
   { key: "rpgCooldown", label: "Ripple gap, hull (s)", min: 0.1, max: 15, step: 0.05, group: RPG, tip: "Held, a rocket leaves the next tube this often while the clip lasts (Magazines group: then the clip is swapped)" },
   { key: "rpgShoulderCooldown", label: "Between rockets, shoulder (s)", min: 0.1, max: 20, step: 0.1, group: RPG },
+  { key: "rpgShoulderDamage", label: "Shoulder rocket damage ×", min: 0.2, max: 4, step: 0.05, group: RPG, tip: "Keith 2026-11-14: the shoulder rocket hits harder than the hull launcher (× its Damage)" },
+  { key: "rpgShoulderBlast", label: "Shoulder rocket blast ×", min: 0.2, max: 3, step: 0.05, group: RPG },
   { key: "rpgMag", label: "Rocket launcher (hull): clip", min: 1, max: 20, step: 1, group: MAG },
   { key: "rpgReload", label: "Rocket launcher (hull): reload (s)", min: 0.2, max: 20, step: 0.1, group: MAG },
   { key: "rpgShoulderMag", label: "Shoulder rocket: clip", min: 1, max: 12, step: 1, group: MAG },
@@ -385,7 +392,8 @@ export const WEAPON_PARAMS: Param[] = [
   ...FIRE_PARAMS,
   ...DAMAGE_TYPE_PARAMS,
   ...SAMPLE_PARAMS,
+  ...STRIKE_PARAMS,
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, LINE_AIM_GROUP, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, ...STRIKE_GROUPS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, LINE_AIM_GROUP, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

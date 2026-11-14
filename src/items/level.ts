@@ -14,7 +14,7 @@ import { STATS } from "./bases";
  * now have their own growth (LOOT levelGrowth 0.05, enemyGrowth 0.075) and hull grows at 0.6 of the item curve.
  */
 export const LEVEL_WEIGHT: Record<string, number> = {
-  damage: 1, hull: 0.6, burnDps: 1, poolDps: 1, coldDps: 1, armour: 0.5, carryBonus: 0.5, radarRange: 0.25, boostFuel: 0.5, salvage: 0.5,
+  damage: 1, finalDamage: 1, wellRadius: 0.15, hull: 0.6, burnDps: 1, poolDps: 1, coldDps: 1, armour: 0.5, carryBonus: 0.5, radarRange: 0.25, boostFuel: 0.5, salvage: 0.5,
   blast: 0.15, splash: 0.15, range: 0.1, magazine: 0.25,
   // Parts that aren't weapons keep growing at about their old pace (4% × their old weight), so every item still rises with
   // level; a weapon's rate, cooldown, charge and spin-up never do.
