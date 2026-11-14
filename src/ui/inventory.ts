@@ -563,7 +563,8 @@ export function inventoryScreen(o: InventoryOptions) {
     const lo = st.loadout;
     const partItem: Record<DollPart, Item | null> = {
       sensor: lo.sensor, pack: lo.pack, hull: lo.hull, legL: lo.legs, legR: lo.legs,
-      armL: lo.mountL, armR: lo.mountR,
+      // The arms come with the hull (Keith 2026-11-14: they needn't show on the doll): an arm side lights with what it holds.
+      armL: isBuiltinArm(lo.mountL) ? lo.heldL : lo.mountL, armR: isBuiltinArm(lo.mountR) ? lo.heldR : lo.mountR,
     };
     for (const p of DOLL_PARTS) {
       const it = partItem[p];
@@ -572,7 +573,8 @@ export function inventoryScreen(o: InventoryOptions) {
     }
     box.append(svg);
     for (const s of SLOTS) {
-      const t = TILES[s], it = lo[s];
+      // A mount holding the hull's own arm shows as an empty mount: the arm isn't an item (Keith 2026-11-14).
+      const t = TILES[s], it = isBuiltinArm(lo[s]) ? null : lo[s];
       const heldBy2 = s === "heldL" && isTwoHander(lo.heldR);
       // A hand only exists with an arm on that mount (or the two-hander's other hand).
       const noHand = (s === "heldL" && !armable(lo, "L")) || (s === "heldR" && !armable(lo, "R"));

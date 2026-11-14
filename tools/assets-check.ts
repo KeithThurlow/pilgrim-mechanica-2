@@ -1,7 +1,7 @@
 // Asset contract check (docs/asset-pipeline.md, docs/asset-list.md): what a built model or picture must never be.
 // Fitted parts (public/models/parts/<base id>.glb, from tools/blender/parts/):
 // - the file is a GLB for a real item base of the right kind, with its sidecar, and the sidecar's numbers match it;
-// - triangles within the kind's budget (pack 2,000, arm 1,500, sensor 1,000, waist 1,000);
+// - triangles within the kind's budget (pack 2,000, arm 2,500 (the whole two-bone arm), sensor 1,000, waist 1,000);
 // - draw cost: one `Body` mesh, at most one `Glow`, one mesh more per moving node; one material each, named
 //   `Paint_plating` / `Paint_lighting`; every mesh carries vertex colours (COLOR_0) and normals;
 // - the kind's sockets are there (a pack: `Mount`, `Top`), and it fits the kind's envelope round its origin;
@@ -18,7 +18,9 @@ const verbose = process.argv.includes("--verbose");
 
 const RULES: Record<string, { tris: number; sockets: string[]; half: [number, number, number] }> = {
   pack: { tris: 2000, sockets: ["Mount", "Top"], half: [0.95, 0.8, 0.85] },
-  arm: { tris: 1500, sockets: ["Shoulder", "Grip_R"], half: [1.2, 2.2, 1.6] },
+  // An arm is six pieces on nodes, no body (tools/blender/parts/arms.py, Keith 2026-11-14: arms to suit the hull): its
+  // bones' ends are sockets; the budget covers the whole two-bone arm.
+  arm: { tris: 2500, sockets: ["Upper_End", "Fore_End"], half: [1.2, 2.2, 1.6] },
   sensor: { tris: 1000, sockets: [], half: [1.2, 1.6, 1.2] },
   waist: { tris: 1000, sockets: ["Mount"], half: [0.9, 0.9, 0.9] },
 };
@@ -89,7 +91,7 @@ for (const file of files) {
     }
   }
   const moving = side ? Object.keys(side.moving ?? {}).length : 0;
-  if (!names.has("Body")) fail(`${tag}: no Body mesh`);
+  if (!names.has("Body") && base.kind !== "arm") fail(`${tag}: no Body mesh`);
   if (meshNodes > 2 + moving) fail(`${tag}: ${meshNodes} meshes (Body, Glow and one per moving node: ${2 + moving} at most)`);
   if (tris > rule.tris) fail(`${tag}: ${tris} tris, budget ${rule.tris}`);
   for (const s of rule.sockets) if (!names.has(s)) fail(`${tag}: no ${s} socket`);
