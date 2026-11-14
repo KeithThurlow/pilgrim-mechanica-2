@@ -68,7 +68,7 @@ export const DENT_DEFAULTS = phoneDefaults({
   printMidDepth: 0.45,
   craterSize: 0.35,
   slideOnSlope: 1,
-  dentSandDepth: 1, dentSandBerm: 1, dentSandSoften: 6, dentSandSlump: 0.5, dentSandLife: 90,
+  dentSandDepth: 1, dentSandBerm: 1, dentSandSoften: 6, dentSandSlump: 0.5, dentSandLife: 9,
   dentDirtDepth: 0.45, dentDirtBerm: 0.5, dentDirtSoften: 1.5, dentDirtSlump: 0.1, dentDirtLife: 400,
   dentGravelDepth: 0.3, dentGravelBerm: 0.6, dentGravelSoften: 2, dentGravelSlump: 0.1, dentGravelLife: 300,
   dentSnowDepth: 2.5, dentSnowBerm: 0.35, dentSnowSoften: 1, dentSnowSlump: 0.02, dentSnowLife: 900,

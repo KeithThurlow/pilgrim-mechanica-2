@@ -28,6 +28,8 @@ export interface HudFrame {
   bankShow: number;
   /** Distance from the road and its ring, while out. */
   depth?: { m: number; live: number; ring: string } | null;
+  /** The run's threat level (runThreat.ts): its item level, metres of depth, and whether it is rising or falling. */
+  threat?: { level: number; m: number; falling: boolean; rising: boolean } | null;
   /** The nearest extraction pad: distance, what calling it costs and who pays, and the call's state. */
   pad?: { dist: number; quote: { fee: number; wait: number; ok: boolean; reason: string }; state: string; remaining: number; text: string } | null;
   /** Salvage heat and its thresholds (the meter shows while it's above zero). */
@@ -116,6 +118,13 @@ export class ExpeditionHud {
     } else if (fuelOn) lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
     const w = Math.round(Math.max(0, Math.min(1, f.fuelShare)) * 100);
     if (fuelOn) lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
+    if (f.threat) {
+      const t = f.threat, lv = Math.max(1, Math.round(t.level)), k = Math.min(1, t.m / 3000) * 100;
+      const col = t.falling ? COL.ok : t.m >= 1500 ? COL.red : t.m >= 600 ? "#ff9a3c" : COL.amber;
+      const trend = t.falling ? " ▼ falling" : t.rising ? " ▲" : "";
+      lines.push(`<div style="font-size:12px;color:${col};margin-top:2px;letter-spacing:0.08em">THREAT ${lv}${trend}</div>`
+        + `<div style="height:4px;background:#ffffff1c;border-radius:2px;margin:2px 0 4px"><div style="height:100%;width:${k}%;background:${col};border-radius:2px"></div></div>`);
+    }
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
     if (f.pad) {
       const p = f.pad, col = p.state !== "idle" ? "#8fd0ff" : p.quote.reason === "locked" ? COL.dim : p.quote.ok ? COL.ok : COL.red;

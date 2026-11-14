@@ -212,10 +212,13 @@ export class SlotInterp {
   private hi = 0;
   private captured = 0;
   private applied = false;
+  private saved: Float32Array[];
+  private appliedN = 0;
 
   constructor(private channels: Channel[], private keys: Num[]) {
     this.prev = channels.map((c) => new Float32Array(c.a.length));
     this.cur = channels.map((c) => new Float32Array(c.a.length));
+    this.saved = channels.map((c) => new Float32Array(c.a.length));
     this.kPrev = keys.map((k) => new (k.constructor as new (n: number) => Num)(k.length));
     this.kCur = keys.map((k) => new (k.constructor as new (n: number) => Num)(k.length));
   }
@@ -237,6 +240,10 @@ export class SlotInterp {
     const a = Math.max(0, alpha), n = Math.min(this.hi, this.hiPrev);
     for (let j = 0; j < this.channels.length; j++) {
       const ch = this.channels[j], s = ch.stride ?? 1, p = this.prev[j], c = this.cur[j], out = ch.a, jump = ch.jump ?? Infinity;
+      // What the arrays hold now, put back by restore(): not this tick's capture, since a write since then (the sim
+      // worker's snapshot onto a view, src/sim/robotsRemote.ts) must survive the drawn frame (2026-11-14: robots in
+      // the convoy lab only moved about once a second while every frame put the last tick's capture back).
+      this.saved[j].set(out.subarray(0, n * s));
       for (let i = 0; i < n; i++) {
         if (!this.same(i)) continue;
         for (let k = i * s, e = k + s; k < e; k++) {
@@ -247,14 +254,15 @@ export class SlotInterp {
         }
       }
     }
+    this.appliedN = n;
     this.applied = true;
   }
 
-  /** Back to this tick's values. */
+  /** Back to the values the arrays held before apply(). */
   restore() {
     if (!this.applied) return;
     this.applied = false;
-    for (let j = 0; j < this.channels.length; j++) { const s = this.channels[j].stride ?? 1; this.channels[j].a.set(this.cur[j].subarray(0, this.hi * s)); }
+    for (let j = 0; j < this.channels.length; j++) { const s = this.channels[j].stride ?? 1; this.channels[j].a.set(this.saved[j].subarray(0, this.appliedN * s)); }
   }
 
   private same(i: number) {
@@ -281,13 +289,32 @@ export function runFrameDrawers(dt: number, alpha: number) { for (const d of dra
  * draw run once per drawn frame with them blended (put back straight after). Dropped once its group, having been in
  * the scene, is taken out. Call once, from the drawer's update when betweenTicks() is true.
  */
-export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, channels: Channel[], keys: Num[], draw: (dt: number) => void) {
+export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, channels: Channel[], keys: Num[], draw: (dt: number) => void, stamp?: () => number | null) {
   const interp = new SlotInterp(channels, keys);
   interp.capture(hi());
   let seen = false;
+  // A swarm stepped in the sim worker (stamp: its snapshot count; null while it steps here) changes when a snapshot
+  // lands, a little after its tick, not at the tick: the blend runs from the last snapshot to the newest, captured as
+  // it lands, and its alpha is the time since then over the time between snapshots (2026-11-14).
+  let last = -1, at = 0, period = 1000 / 30;
+  const remote = () => { const s = stamp?.(); return s === undefined || s === null ? -1 : s; };
   drawEachFrame({
-    afterTick: () => interp.capture(hi()),
-    frame: (dt, alpha) => { if (!group.parent) return; interp.apply(alpha); try { draw(dt); } finally { interp.restore(); } },
+    afterTick: () => { if (remote() < 0) interp.capture(hi()); },
+    frame: (dt, alpha) => {
+      const s = remote();
+      if (s >= 0) {
+        const now = performance.now();
+        if (s !== last) {
+          if (last >= 0) period += (Math.min(200, Math.max(8, now - at)) - period) * 0.2;
+          last = s; at = now;
+          interp.capture(hi());
+        }
+        alpha = Math.min(1, (now - at) / period);
+      }
+      if (!group.parent) return;
+      interp.apply(alpha);
+      try { draw(dt); } finally { interp.restore(); }
+    },
     live: () => { if (group.parent) seen = true; return !(seen && !group.parent); },
   });
 }

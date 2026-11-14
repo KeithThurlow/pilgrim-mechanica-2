@@ -5,6 +5,11 @@
 // home: on the rim when the return point is out of range (pulsing when fuel is short), a ring on it when in range.
 // Keith 2026-11-01: the scope about twice the size (radarSize), the convoy bright cyan with a ring and a label (a
 // cyan bar on the rim when it's off the scope), mission targets bright green, bigger and ringed, distance always shown.
+// Keith 2026-11-14 ("too many glowing icons, hard to read"): enemies only inside the mech's sensor range (no ring:
+// the convoy's scope is only up aboard), heat blobs and glows toned down (radarHeatAlpha, radarBloom), and the
+// POIs as clear steady marks with a dark edge: small diamonds for tier 1, bigger gold ones for tier 2-4, a square with
+// its name for the fortresses and hubs; grey when stripped.
+import { POI_KINDS, type PoiKind } from "../world/pois";
 import type { RadarPicture, RadarValues } from "./radar";
 
 interface Painted { x: number; z: number; glow: number; kind: "poi" | "robot" | "pad"; tier: number; size: number; stripped?: boolean; faction?: number; label?: string }
@@ -123,9 +128,9 @@ export class RadarDraw {
     // Swarms: heat blobs, a rough guess of danger.
     for (const b of pic.blobs) {
       const [x, y] = at(b.x, b.z), r = Math.max(7, b.r * scale);
-      const pulse = b.awake ? 0.75 + 0.25 * Math.sin(this.time * 6) : 1;
+      const pulse = b.awake ? 0.85 + 0.15 * Math.sin(this.time * 4) : 1;
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      const a = (0.4 + 0.5 * b.heat) * pulse;
+      const a = (0.4 + 0.5 * b.heat) * pulse * v.radarHeatAlpha;
       if (b.faction === 1) {
         // Raiders: magenta heat, hotter toward white-pink.
         g.addColorStop(0, `rgba(255, ${Math.round(90 + 60 * b.heat)}, 200, ${a})`);
@@ -183,7 +188,7 @@ export class RadarDraw {
     // The convoy's cars: bright, outlined, glowing; a slow ring and a label on the nearest so it reads at a glance.
     if (pic.convoy.length) {
       ctx.save();
-      ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k;
+      ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k * v.radarBloom;
       ctx.fillStyle = CONVOY;
       for (const car of pic.convoy) {
         const [x, y] = at(car.x, car.z);
@@ -211,7 +216,8 @@ export class RadarDraw {
         ctx.fillStyle = CONVOY; ctx.fillText("CONVOY", x + ring + 4, y);
       }
     }
-    // Blips.
+    // Blips (POIs gathered and drawn after, on top).
+    const pois: Painted[] = [];
     for (const p of this.painted.values()) {
       const [x, y] = at(p.x, p.z);
       if (p.kind === "robot") {
@@ -228,14 +234,33 @@ export class RadarDraw {
         if (p.stripped) { ctx.strokeStyle = "#ffffff"; ctx.beginPath(); ctx.arc(x, y, 7 + 2 * Math.sin(this.time * 6), 0, TAU); ctx.stroke(); }
         if (p.label) { ctx.font = "600 10px system-ui, sans-serif"; ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(p.label, x + 8, y + 4); ctx.fillStyle = "#cfeaff"; ctx.fillText(p.label, x + 7, y + 3); }
         ctx.globalAlpha = 1;
+      } else pois.push(p);
+    }
+    // POIs on top of everything but the sweep: steady (the convoy's charts), a dark edge so they read on any heat.
+    const ps = k * v.radarPoiSize;
+    for (const p of pois) {
+      const [x, y] = at(p.x, p.z);
+      ctx.globalAlpha = 0.85 + 0.15 * Math.max(0, p.glow);
+      ctx.lineWidth = 1.2; ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      if (p.tier >= 5) {
+        // A fortress or a hub: a square with a notch, and its name.
+        const s = 5.5 * ps;
+        ctx.fillStyle = p.stripped ? "#8a8578" : "#ff9a5a";
+        ctx.fillRect(x - s, y - s, s * 2, s * 2); ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.55)"; ctx.fillRect(x - s * 0.4, y - s * 0.4, s * 0.8, s * 0.8);
+        const name = (POI_KINDS[p.label as PoiKind]?.label ?? "").toUpperCase();
+        if (name) {
+          ctx.font = font(9); ctx.textAlign = "center"; ctx.textBaseline = "top";
+          ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillText(name, x + 1, y + s + 3);
+          ctx.fillStyle = "#ffd2b0"; ctx.fillText(name, x, y + s + 2);
+        }
       } else {
-        const a = 0.4 + 0.6 * Math.max(0, p.glow), s = p.tier >= 2 ? 5 : 3.5;
-        ctx.globalAlpha = a;
+        const s = (p.tier >= 2 ? 5.5 : 4) * ps;
         ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath();
-        if (p.stripped) { ctx.strokeStyle = "#8a8578"; ctx.lineWidth = 1; ctx.stroke(); }
-        else { ctx.fillStyle = p.tier >= 2 ? "#ffd27a" : AMBER; ctx.fill(); }
-        ctx.globalAlpha = 1;
+        if (p.stripped) { ctx.fillStyle = "rgba(60, 58, 52, 0.9)"; ctx.fill(); ctx.strokeStyle = "#8a8578"; ctx.stroke(); }
+        else { ctx.fillStyle = p.tier >= 2 ? "#ffd27a" : AMBER; ctx.fill(); ctx.stroke(); }
       }
+      ctx.globalAlpha = 1;
     }
     // The sweep wedge.
     const sw = this.sweep - Math.PI / 2;
@@ -282,7 +307,7 @@ export class RadarDraw {
       if (Math.hypot(x - c, y - c) >= R - 8) {
         const a = Math.atan2(x - c, c - y);
         ctx.save(); ctx.translate(c, c); ctx.rotate(a);
-        ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k;
+        ctx.shadowColor = CONVOY; ctx.shadowBlur = 8 * k * v.radarBloom;
         ctx.fillStyle = CONVOY; ctx.fillRect(-9 * k, -R - 3, 18 * k, 6 * k);
         ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.lineWidth = 1; ctx.strokeRect(-9 * k, -R - 3, 18 * k, 6 * k);
         ctx.restore();
@@ -304,7 +329,7 @@ export class RadarDraw {
         ctx.beginPath(); ctx.arc(px, py, ring, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
       }
       ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4);
-      if (mission) { ctx.shadowColor = colour; ctx.shadowBlur = 10 * k; }
+      if (mission) { ctx.shadowColor = colour; ctx.shadowBlur = 10 * k * v.radarBloom; }
       ctx.fillStyle = colour; ctx.strokeStyle = "rgba(0,0,0,0.75)"; ctx.lineWidth = 1.2;
       ctx.fillRect(-size, -size, size * 2, size * 2); ctx.shadowBlur = 0; ctx.strokeRect(-size, -size, size * 2, size * 2);
       ctx.restore();

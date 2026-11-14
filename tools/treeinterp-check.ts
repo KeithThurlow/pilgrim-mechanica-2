@@ -119,6 +119,12 @@ if (!near(root.position.x, 4.5)) fail(`after the change it blends again: ${root.
   if (!near(f[1], 2) || !near(f[3], 4)) fail(`strided: ${f[1]}, ${f[3]}`);
   si.restore();
   if (x[0] !== 2 || h[0] !== Math.fround(-3) || f[3] !== 8) fail("slot restore should be exact");
+  // A write after the tick's capture (the sim worker's snapshot onto a view) survives a drawn frame (2026-11-14:
+  // restore used to put the capture back, so robots in the convoy lab only moved about once a second).
+  x.set([7, 8, 9]);
+  si.apply(0.5);
+  si.restore();
+  if (x[0] !== 7 || x[1] !== 8 || x[2] !== 9) fail(`a write since the capture should survive apply and restore: ${[...x]}`);
 }
 if (problems.length) { console.log(`treeinterp: ${problems.length} problem(s)`); process.exit(1); }
 console.log("treeinterp: ok");

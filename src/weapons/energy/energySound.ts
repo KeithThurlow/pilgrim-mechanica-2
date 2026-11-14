@@ -39,6 +39,10 @@ export function addEnergySounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("plasmaShot", variants(3, 75, (r) => S.mix(S.whine(0.18, 900, 260, 0.3), S.thump(0.14, 260, 90, 0.5), S.noise(r, 0.12, 2400, 0.25, 0.002))), () => v.energyLevel);
   sfx.addSound("plasmaHit", variants(3, 76, (r) => S.mix(S.thump(0.25, 180, 60, 0.6), S.noise(r, 0.3, 1800, 0.45, 0.001), S.scale(S.crackle(r, 0.25, 0.25), 1))), () => v.energyLevel);
   sfx.addSound("orbLaunch", variants(2, 77, (r) => S.mix(S.whine(0.6, 120, 420, 0.25), S.whine(0.6, 240, 840, 0.08), S.scale(S.crackle(r, 0.6, 0.15), 1), S.thump(0.3, 120, 50, 0.5))), () => v.energyLevel);
+  // The arc caster's spool (Keith 2026-11-14): a capacitor charger's whine, a seamless 1 s loop the glue bends up with
+  // the charge (pitch 0.3 to 1 of this): a bright tone with its octave, a faint mains buzz under it, a fast flutter and
+  // a few sparse ticks.
+  sfx.addSound("arcWhine", variants(1, 82, (r) => capWhine(S, r)), () => v.energyLevel);
   sfx.addSound("arcZap", variants(4, 78, (r) => S.mix(S.scale(S.crackle(r, 0.16, 0.6), 1.2), S.noise(r, 0.08, 7000, 0.4, 0.0005), S.band(r, 0.14, 2500, 7000, 0.3, 0.001, -40), S.tick(r, 0.015, 0.6))), () => v.energyLevel);
 }
 
@@ -72,5 +76,21 @@ function discharge(S: Synth, r: () => number, len: number, hz: number, gain: num
     const am = 0.65 + 0.35 * Math.sin(trem * 2 * Math.PI);
     s[i] = saw * am * Math.min(1, t / 0.008) * Math.exp(-3.5 * k) * gain;
   }
+  return s;
+}
+
+/** A capacitor charger's whine, 1 s and seamless (every partial a whole number of cycles a second). */
+function capWhine(S: Synth, r: () => number) {
+  const len = 1, s = new Float32Array(S.n(len)), n = s.length, TAU = 2 * Math.PI;
+  const ticks = Array.from({ length: 9 }, () => Math.floor(r() * n));
+  for (let i = 0; i < n; i++) {
+    const t = i / S.rate;
+    const flutter = 0.8 + 0.2 * Math.sin(TAU * 31 * t);
+    const tone = Math.sin(TAU * 2400 * t) * 0.2 + Math.sin(TAU * 4800 * t) * 0.06 + Math.sin(TAU * 3600 * t + 0.4 * Math.sin(TAU * 7 * t)) * 0.04;
+    const buzz = Math.sign(Math.sin(TAU * 120 * t)) * 0.025 + Math.sin(TAU * 240 * t) * 0.03;
+    s[i] = tone * flutter + buzz;
+  }
+  // Sparse ticks (a few short decaying clicks), wrapped round the end.
+  for (const at of ticks) for (let j = 0; j < 160; j++) s[(at + j) % n] += (r() * 2 - 1) * 0.25 * Math.exp(-j / 30);
   return s;
 }

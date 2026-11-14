@@ -23,7 +23,7 @@ import type { MechUnit } from "../../game/mechUnit";
 import type { WeaponValues } from "../tuning";
 import type { Vec3 } from "../painter";
 import { rayGround } from "../../world/raycast";
-import { EnergySim, energyStats, withProtocols, type EnergyClass, type EnergyStats } from "./energySim";
+import { EnergySim, energyNeed, energyStats, withProtocols, type EnergyClass, type EnergyStats } from "./energySim";
 import type { ShotProtocols } from "../../game/shots";
 import { addEnergySounds } from "./energySound";
 import type { Loop } from "../../audio/sfx";
@@ -129,6 +129,7 @@ export class EnergyGuns {
     } else if (st.cls === "plasma" || st.cls === "orb") {
       for (let k = 0; k < out.shots; k++) this.launch(st, muzzle, st.cls === "orb" ? flat : want, gi);
     } else if (st.cls === "arc") {
+      this.spool(s, held, muzzle, gi);
       for (let k = 0; k < out.shots; k++) this.zap(st, muzzle, want, aim, gi);
     } else if (st.cls === "beam") {
       this.stepBeam(s, st, dt, muzzle, want, out.shots);
@@ -162,11 +163,35 @@ export class EnergyGuns {
   // (Bolts and orbs already in flight carry on: they're shots, not the gun.)
 
   /** A sunder beam is charging or burning (the walk slows). */
+  /** Capacitor gating (Keith 2026-11-14): the biggest shot a fitted energy weapon commits at once (bars, 0: none
+   *  gated), and whether one is held while the reactor is too small for it (the reactor bar shows both). */
+  need(): number { let n = 0; for (let i = 0; i < 2; i++) { const st = this.stats(i); if (st) n = Math.max(n, energyNeed(st.cls, st.energy)); } return this.v.energyCost < 0.5 ? 0 : n; }
+  underpowered(): boolean { return this.sides.some((s) => s.cls && s.sim.under); }
+
   slowed(): boolean { return this.sides.some((s) => s.cls === "sunder" && s.sim.phase > 0); }
 
   private quiet(s: ESide) {
     s.beam.on = false; s.charge.on = false; s.charge.k = 0; s.whined = false; s.tele.on = false;
     if (s.loop) { this.bf.sfx.stopLoop(s.loop); s.loop = null; }
+  }
+
+  /**
+   * The arc's spool (Keith 2026-11-14: "like a capacitor charging"): a whine that climbs with the charge (a loop, its
+   * pitch and level by the spool, so it winds down too when let go), a ball of light swelling at the muzzle with sparks
+   * crackling off it, and the gun trembling a little. Full, the whine holds high and flutters while it zaps.
+   */
+  private spool(s: ESide, held: boolean, muzzle: THREE.Vector3, gi: number) {
+    const k = s.sim.spin, v = this.v;
+    s.charge.on = k > 0.01;
+    s.charge.k = k;
+    set3(s.charge.at, muzzle);
+    if (k <= 0.01 && !held) { if (s.loop) { this.bf.sfx.stopLoop(s.loop); s.loop = null; } return; }
+    if (!s.loop) s.loop = this.bf.sfx.startSoundLoop("arcWhine", Math.random());
+    const full = held && k >= 0.999;
+    const pitch = full ? 1 + 0.025 * Math.sin(performance.now() * 0.05) : 0.3 + 0.7 * Math.pow(k, 0.7);
+    const vol = (held ? 0.35 + 0.65 * k : 0.8 * k) * v.arcWhineLevel;
+    if (s.loop) this.bf.sfx.setSoundLoop(s.loop, "arcWhine", muzzle, vol, pitch);
+    if (held && !full) this.unit.upper.guns[gi].kick = Math.max(this.unit.upper.guns[gi].kick, 0.008 * k);
   }
 
   /** The HUD's word for side i: charge, beam, out of energy. */
@@ -176,6 +201,7 @@ export class EnergyGuns {
     if (s.sim.dry) return `<b style="color:#ff7a5c">no energy</b>`;
     if (s.cls === "lance") return s.sim.cool > 0 ? `${s.sim.cool.toFixed(1)} s` : s.sim.holding ? `charge ${Math.round(s.sim.charge * 100)}%` : "hold to charge";
     if (s.cls === "beam") return s.beam.on ? "burning" : "hold to burn";
+    if (s.cls === "arc") return s.sim.spin >= 0.999 ? "zapping" : s.sim.spin > 0.01 ? `charge ${Math.round(s.sim.spin * 100)}%` : "hold to charge";
     if (s.cls === "sunder") return s.sim.phase === 1 ? `charge ${Math.round(s.sim.charge * 100)}%` : s.sim.phase === 2 ? `blast ${(s.sim.left * (this.stats(i)?.channel ?? 0)).toFixed(1)} s` : s.sim.cool > 0 ? `${s.sim.cool.toFixed(1)} s` : "click to charge";
     return "hold to fire";
   }

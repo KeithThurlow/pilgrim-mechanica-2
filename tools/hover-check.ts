@@ -109,20 +109,22 @@ console.log(`-- hover legs (${legs.look} legs; walk ${values.walkSpeed} m/s, run
   must(!sim.hovering && sim.stats.steps > 0, "hover off: never walked again");
 }
 
-// ---- The loadout rule ----
+// ---- The loadout rule (Keith 2026-11-14, soft limits: any hull fits, a heavy one slows the hover legs) ----
 {
   const lo = defaultLoadout();
   const hover = makeItem("legs-hover");
-  must(!!fitProblem(lo, "legs", hover), "hover legs fitted under the Rampart hull");
-  const salv = { ...defaultLoadout(), hull: makeItem("hull-salvager") };
-  must(!fitProblem(salv, "legs", hover), "hover legs refused under the Salvager hull");
+  must(!fitProblem(lo, "legs", hover), "hover legs refused under the Rampart hull");
   fit(lo, "hull", makeItem("hull-cuirass"));
-  must(!fitProblem(lo, "legs", hover), "hover legs refused under the Cuirass hull");
   fit(lo, "legs", hover);
-  for (const h of ["hull-rampart", "hull-siege"]) must(!!fitProblem(lo, "hull", makeItem(h)), `${h} fitted on hover legs`);
-  must(resolve(lo).values.hover === 1, "hover legs don't resolve to the hover drive");
+  const light = resolve(lo);
+  for (const h of ["hull-rampart", "hull-siege"]) {
+    must(!fitProblem(lo, "hull", makeItem(h)), `${h} refused on hover legs`);
+    const heavy = resolve({ ...lo, hull: makeItem(h) });
+    must(heavy.values.walkSpeed < light.values.walkSpeed * 0.9, `${h} on hover legs: walk ${heavy.values.walkSpeed.toFixed(2)} vs ${light.values.walkSpeed.toFixed(2)} m/s on the Cuirass`);
+  }
+  must(light.values.hover === 1, "hover legs don't resolve to the hover drive");
   must(resolve(defaultLoadout()).values.hover === 0, "Rampart legs resolve to the hover drive");
-  console.log(`  fit: ${fitProblem(defaultLoadout(), "legs", hover)}`);
+  console.log(`  load: Cuirass ${light.load.tonnes.toFixed(1)} / ${light.load.best} t, walk ${light.values.walkSpeed.toFixed(2)} m/s`);
 }
 
 if (failed) { console.log("hover check FAILED"); process.exit(1); }

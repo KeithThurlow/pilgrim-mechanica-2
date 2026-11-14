@@ -8,13 +8,13 @@
 // Run: npm test (or npx tsx tools/energy-check.ts).
 import * as THREE from "three";
 import { WEAPON_DEFAULTS } from "../src/weapons/tuning";
-import { EnergySim, energyStats, isEnergy, type EnergyPool } from "../src/weapons/energy/energySim";
+import { EnergySim, energyNeed, energyStats, isEnergy, type EnergyPool } from "../src/weapons/energy/energySim";
 import { EnergyGuns } from "../src/weapons/energy/energyGuns";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { Reactor, REACTOR_DEFAULTS } from "../src/mech/reactor";
 import { BASE_BY_ID } from "../src/items/bases";
 import { DummyRange, DUMMY_DEFAULTS } from "../src/game/dummies";
-import { defaultLoadout, fit, fitProblem, resolve } from "../src/items/loadout";
+import { defaultLoadout, energyNeedOf, fit, fitProblem, resolve } from "../src/items/loadout";
 import { makeItem } from "../src/items/generate";
 import { loadoutFor } from "../src/items/weaponPick";
 import { itemDps } from "../src/items/power";
@@ -134,6 +134,41 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   must(!s3.on && s3.phase === 0 && s3.step(dt, false, st, pool(100)).shots === 0, "a dash didn't cut the sunder beam off");
 }
 
+// ---- Capacitor gating (Keith 2026-11-14, soft limits): a shot bigger than the reactor holds ----
+{
+  const capped = (n: number, cap: number) => Object.assign(pool(n), { cap });
+  // A sunder beam on a reactor too small for its press: never starts, however long it's held, takes nothing.
+  const st = energyStats("sunder", null, V), small = capped(V.sunderEnergy * 0.9, V.sunderEnergy * 0.9), s1 = new EnergySim();
+  for (let t = 0; t < 3; t += dt) s1.step(dt, true, st, small);
+  must(s1.phase === 0 && s1.under && s1.dry && near(small.left, V.sunderEnergy * 0.9), "an underpowered sunder beam started or spent energy");
+  // Big enough: it fires (and isn't flagged). Energy free: never gated.
+  const big = capped(V.sunderEnergy, V.sunderEnergy), s2 = new EnergySim();
+  s2.step(dt, true, st, big);
+  must(s2.phase === 1 && !s2.under, "a sunder beam with a reactor just big enough didn't start");
+  const s3 = new EnergySim(); s3.step(dt, true, st, capped(0, 0.5), true);
+  must(s3.phase === 1 && !s3.under, "a free sunder beam (Energy 0) was gated");
+  // A lance on a reactor holding half its full charge: charges to half, however long, and fires at that power.
+  const ls = energyStats("lance", null, V), half = capped(100, V.lanceEnergy * 0.5), s4 = new EnergySim();
+  for (let t = 0; t < V.lanceCharge * 3; t += dt) s4.step(dt, true, ls, half);
+  must(Math.abs(s4.charge - 0.5) < 1e-6 && s4.under, `an underpowered lance charged to ${s4.charge.toFixed(3)} (want 0.5)`);
+  const power = s4.step(dt, false, ls, half).power;
+  must(Math.abs(power - 0.5) < 1e-6, `the underpowered lance fired at ${power.toFixed(3)}`);
+  // Per-shot weapons aren't gated.
+  must(energyNeed("laser", 0.05) === 0 && energyNeed("beam", 0.4) === 0 && energyNeed("arc", 0.06) === 0, "a per-shot weapon has a gated need");
+  // Items: the Rampart's reactor holds a sunder shot, a 3-bar Salvager's doesn't, a capacitor bank tops it up.
+  const lo = defaultLoadout();
+  fit(lo, "mountL", makeItem("sunder-medium"));
+  const ramp = resolve(lo), need = energyNeedOf(ramp)!;
+  must(need > 0 && need <= ramp.values.reactorCap, `a sunder beam on the Rampart is underpowered (${need} / ${ramp.values.reactorCap})`);
+  lo.hull = makeItem("hull-salvager");
+  const salv = resolve(lo);
+  must(need > salv.values.reactorCap, `a sunder beam on the Salvager isn't underpowered (${need} / ${salv.values.reactorCap})`);
+  fit(lo, "shoulderR", makeItem("sh-capacitor"));
+  const bank = resolve(lo);
+  must(bank.values.reactorCap > salv.values.reactorCap + 1 && need <= bank.values.reactorCap, `a capacitor bank didn't bring the Salvager up to a sunder shot (${bank.values.reactorCap})`);
+  console.log(`capacitor gating: sunder needs ${need.toFixed(1)} bars · Rampart ${ramp.values.reactorCap} · Salvager ${salv.values.reactorCap} · Salvager + bank ${bank.values.reactorCap.toFixed(1)}`);
+}
+
 // ---- Items ----
 {
   for (const [base, cls] of [["laser-medium", "laser"], ["beam-medium", "beam"], ["lance-medium", "lance"]] as const) {
@@ -174,6 +209,25 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     for (let t = 0; t < after; t += dt) guns.age(dt);
     return { range, unit, guns };
   };
+  // The arc caster's spool (Keith 2026-11-14): no zap until the capacitors are full; full, it zaps at its rate; let
+  // go, the spool drains, and a quick re-press fires sooner than a cold one; a dash empties it.
+  {
+    const st = energyStats("arc", null, V), sim = new EnergySim(), pool: EnergyPool = { energy: 99, use: () => true };
+    let shots = 0, first = -1;
+    for (let t = 0; t < V.arcSpool + 1 + dt / 2; t += dt) { const o = sim.step(dt, true, st, pool); if (o.shots && first < 0) first = t; shots += o.shots; }
+    must(first >= V.arcSpool - 2 * dt && first <= V.arcSpool + 2 * dt, `the arc's first zap came at ${first.toFixed(3)} s, not after its ${V.arcSpool} s spool`);
+    must(Math.abs(shots - (1 + V.arcRate * 1)) <= 1, `the arc zapped ${shots} times in its first second at full spool (want about ${1 + V.arcRate})`);
+    const off = 0.2;
+    for (let t = 0; t < off; t += dt) sim.step(dt, false, st, pool);
+    must(near(sim.spin, 1 - off / V.arcSpinDown, 0.02), `the arc's spool didn't drain at its rate (${sim.spin.toFixed(3)})`);
+    let again = 0;
+    for (let t = 0; t < V.arcSpool; t += dt) { if (sim.step(dt, true, st, pool).shots) break; again += dt; }
+    must(again < V.arcSpool * 0.6, `a quick re-press took ${again.toFixed(2)} s to zap (a warm spool should be quicker)`);
+    sim.drop();
+    must(sim.spin === 0, "a dash didn't empty the arc's spool");
+    const st0 = { ...st, spool: 0 }, cold = new EnergySim();
+    must(cold.step(dt, true, st0, pool).shots === 1, "an arc with no spool didn't zap at once");
+  }
   const flat = () => 0;
   const spots = [{ x: 0, z: 25 }, { x: 6, z: 25 }];
   {
@@ -231,13 +285,13 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
   {
     // Arc: the cutout nearest the aim, then jumps along a line of cutouts 6 m apart, damage falling by the keep.
     const line = [0, 1, 2, 3, 4, 5, 6].map((k) => ({ x: k * 6, z: 20 }));
-    const { range, guns } = fire("arc", flat, 20, dt, line);
+    const { range, guns } = fire("arc", flat, 20, V.arcSpool + 2 * dt, line);
     const hits = guns.last.arcHits ?? 0;
     must(hits === Math.min(line.length, V.arcHops + 1), `the arc struck ${hits} cutouts (want ${Math.min(line.length, V.arcHops + 1)})`);
     must(taken(range.dummies[0]) > 0 && taken(range.dummies[V.arcHops]) > 0 && taken(range.dummies[V.arcHops + 1]) === 0, "the arc's jumps didn't run down the line in order and stop");
-    const lone = fire("arc", flat, 20, dt, [{ x: 0, z: 20 }, { x: 0, z: 20 + V.arcHopRange + 3 }]);
+    const lone = fire("arc", flat, 20, V.arcSpool + 2 * dt, [{ x: 0, z: 20 }, { x: 0, z: 20 + V.arcHopRange + 3 }]);
     must(lone.guns.last.arcHits === 1 && taken(lone.range.dummies[1]) === 0, "the arc jumped further than its reach");
-    const none = fire("arc", flat, 20, dt, [{ x: 0, z: 60 }]);
+    const none = fire("arc", flat, 20, V.arcSpool + 2 * dt, [{ x: 0, z: 60 }]);
     must(none.guns.arcs.length === 1 && none.guns.last.arcHits === 1 && taken(none.range.dummies[0]) === 0, "an arc with nothing in range didn't ground at the aim");
   }
   {

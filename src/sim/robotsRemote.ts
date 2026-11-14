@@ -43,7 +43,7 @@ const UNCHANGED: Record<string, (sw: RobotSwarm, a: unknown[]) => boolean> = {
 };
 
 /** Fields never copied: the step's own flags and scratch, the view's settings. */
-const SKIP = new Set(["stepping", "silent", "hideDead", "remote", "events", "v", "ground", "lookGround", "keepOut", "reactors"]);
+const SKIP = new Set(["snapStamp", "stepping", "silent", "hideDead", "remote", "events", "v", "ground", "lookGround", "keepOut", "reactors"]);
 
 export interface RobotSnapshot {
   hi: number;
@@ -216,6 +216,7 @@ export class RobotsView {
       } finally { this.depth--; sw.silent = false; }
     }
     for (const e of events) this.inbox.push(e);
+    sw.snapStamp++;
     this.stats.snapshots++;
     this.stats.ms = ms;
   }

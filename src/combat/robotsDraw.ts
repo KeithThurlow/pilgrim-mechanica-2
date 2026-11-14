@@ -253,7 +253,7 @@ export class RobotsDraw {
       { a: sw.heading, angle: true }, { a: sw.turret, angle: true }, { a: sw.tumble, angle: true },
       { a: sw.gait, jump: 10 }, { a: sw.stateTime, jump: 1 },
       { a: sw.footX, stride: WALK_LEGS }, { a: sw.footY, stride: WALK_LEGS }, { a: sw.footZ, stride: WALK_LEGS },
-    ], [sw.gen, sw.state], (dt) => this.draw(dt));
+    ], [sw.gen, sw.state], (dt) => this.draw(dt), () => (sw.remote ? sw.snapStamp : null));
   }
 
   private draw(dt: number): void {
