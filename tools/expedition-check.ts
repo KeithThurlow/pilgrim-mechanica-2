@@ -224,7 +224,9 @@ const STEP = 1 / 20;
     unknown: [{ id: "f", x: -600, z: 0, r: 200 }],
     contacts: [{ id: 1, x: mx + 50, z: mz, kind: 0 }, { id: 2, x: mx + 400, z: mz, kind: 0 }],
   });
-  if (!linked(V, world(0, V.convoyLink - 5), false) || linked(V, world(0, V.convoyLink + 5), false) || !linked(V, world(0, 5000), true)) fail("link edge wrong");
+  if (linked(V, world(0, 5), false) || !linked(V, world(0, 5000), true)) fail("convoy radar on off the convoy (convoyRadarAboard)");
+  const EDGE = { ...V, convoyRadarAboard: 0 };
+  if (!linked(EDGE, world(0, V.convoyLink - 5), false) || linked(V, world(0, V.convoyLink + 5), false) || !linked(V, world(0, 5000), true)) fail("link edge wrong");
   // The old picture (radarAllEnemies): camps as heat over the convoy's whole coverage, no single robots.
   const OLD = { ...V, radarAllEnemies: 1 };
   const c = radarPicture(OLD, world(100, 0), "convoy");
