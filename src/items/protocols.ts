@@ -61,7 +61,7 @@ export const PROTOCOLS: Protocol[] = [
   { id: "coolant", name: "Coolant loop", text: "Dash recharges 30% faster, −10% hull", fits: ["power"], rarity: "rare", drop: 1,
     mods: [{ stat: "dashRecharge", mul: 0.7, scope: "item" }, { stat: "hull", mul: 0.9, scope: "mech" }] },
   { id: "servoBoost", name: "Servo boost", text: "+8% walk and sprint, carries 20% less", fits: ["legs"], rarity: "uncommon", drop: 1,
-    mods: [{ stat: "walkSpeed", mul: 1.08, scope: "item" }, { stat: "sprintSpeed", mul: 1.08, scope: "item" }, { stat: "carry", mul: 0.8, scope: "item" }] },
+    mods: [{ stat: "walkSpeed", mul: 1.05, scope: "item" }, { stat: "sprintSpeed", mul: 1.05, scope: "item" }, { stat: "carry", mul: 0.8, scope: "item" }] },
   { id: "plating", name: "Extra plating", text: "+20% hull, 15% slower torso", fits: ["hull"], rarity: "uncommon", drop: 1,
     mods: [{ stat: "hull", mul: 1.2, scope: "item" }, { stat: "torsoTurnRate", mul: 0.85, scope: "item" }] },
   // Behaviour Protocols on the rounds (src/game/shots.ts; rockets in src/weapons/arsenal.ts), each with its price.
