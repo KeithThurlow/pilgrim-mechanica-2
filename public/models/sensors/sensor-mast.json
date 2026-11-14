@@ -1,0 +1,36 @@
+{
+ "id": "sensor-mast",
+ "kind": "sensor",
+ "name": "Rampart mast",
+ "maker": "Stratford-Aegis",
+ "says": "radio mast: braced post, small dish, beacon",
+ "tris": 448,
+ "meshes": 3,
+ "size": [
+  0.68,
+  1.314,
+  0.585
+ ],
+ "min": [
+  -0.34,
+  0.0,
+  -0.23
+ ],
+ "max": [
+  0.34,
+  1.3137,
+  0.3546
+ ],
+ "sockets": {},
+ "moving": {
+  "Sweep": {
+   "axis": "y",
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/sensors.py"
+}

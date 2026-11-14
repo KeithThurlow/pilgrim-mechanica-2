@@ -9,6 +9,7 @@ import { mergeTintedTree } from "../look/mergeGeometry";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { ToonLook } from "../look/toon";
 import { asset } from "../core/assetBase";
+import { dressPart } from "./partModels";
 
 export interface SensorModel {
   root: THREE.Group;
@@ -45,7 +46,7 @@ export function fromGlb(scene: THREE.Object3D, look: ToonLook): SensorModel {
   const root = new THREE.Group();
   const copy = scene.clone(true);
   root.add(copy);
-  copy.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry = m.geometry.clone(); look.apply(m); } });
+  dressPart(copy, look);
   const find = (n: string) => copy.getObjectByName(n) ?? null;
   return { root, head: find("Head"), pitch: find("HeadPitch"), sweep: find("Sweep"), source: "glb" };
 }

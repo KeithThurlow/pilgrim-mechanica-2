@@ -390,7 +390,7 @@ export interface Resolved {
   /** Parts to show on the model: each side's mount ("gun": a hull weapon, "arm", or null), drums per waist side, the
    *  pack (a power pack, not a back weapon), the sensor (and which: its base id, for the model, and its style).
    *  `drums` is either side (older bodies). */
-  parts: { legsLook: string; hullLook: string; drums: boolean; drumsL: boolean; drumsR: boolean; pack: boolean; packId: string | null; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null; armId: string };
+  parts: { legsLook: string; hullLook: string; drums: boolean; drumsL: boolean; drumsR: boolean; waistL: string | null; waistR: string | null; pack: boolean; packId: string | null; sensor: boolean; sensorId: string | null; sensorStyle: SensorStyle | null; mountL: "gun" | "arm" | null; mountR: "gun" | "arm" | null; armId: string };
   /** Shoulder weapons on their keys: the arms' shoulders 1 and 2, the back weapon on the pack mount 3 (mount "back"
    *  is the model's top of the back); their own rolled stats (null: an unrolled base item, on the weapon sliders). */
   shoulders: { key: 1 | 2 | 3; mount: ShoulderMount; weapon: ShoulderWeapon; family: ShoulderFamily; own: Record<string, number> | null; proto?: import("../game/shots").ShotProtocols; cost?: number }[];
@@ -519,7 +519,7 @@ export function resolve(lo: Loadout, bare: LoadoutValues = LOADOUT_DEFAULTS): Re
   return {
     values,
     guns: { left, right },
-    parts: { legsLook: lo.legs ? lookFor(lo.legs) : "rampart", hullLook: lo.hull ? lookFor(lo.hull) : "rampart", drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), pack: !!pack, packId: lo.pack?.kind === "pack" ? lo.pack.base : null, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R"), armId: hullArmBase(lo.hull) ?? "arm-rampart" },
+    parts: { legsLook: lo.legs ? lookFor(lo.legs) : "rampart", hullLook: lo.hull ? lookFor(lo.hull) : "rampart", drums: drum("waistL") || drum("waistR"), drumsL: drum("waistL"), drumsR: drum("waistR"), waistL: lo.waistL?.base ?? null, waistR: lo.waistR?.base ?? null, pack: !!pack, packId: lo.pack?.kind === "pack" ? lo.pack.base : null, sensor: !!lo.sensor, sensorId: lo.sensor?.base ?? null, sensorStyle: lo.sensor ? sensorStyleOf(lo.sensor) : null, mountL: mountPart("L"), mountR: mountPart("R"), armId: hullArmBase(lo.hull) ?? "arm-rampart" },
     shoulders: ([["shoulderL", 1, "shoulderL"], ["shoulderR", 2, "shoulderR"], ["pack", 3, "back"]] as const).flatMap(([slot, key, mount]) => {
       const it = lo[slot], w = it?.kind === "shoulder" ? BASE_BY_ID[it.base]?.shoulder : undefined;
       return it && w ? [{ key, mount, weapon: w, family: SHOULDER_FAMILY[w], own: it.seed ? effectiveStats(it) : null, proto: shotProtocolsOf(it.socketed), cost: shotCostOf(it.socketed) }] : [];

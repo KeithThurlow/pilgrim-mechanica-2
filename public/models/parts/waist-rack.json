@@ -1,0 +1,33 @@
+{
+ "id": "waist-rack",
+ "kind": "waist",
+ "name": "Cargo rack",
+ "maker": "Stratford-Aegis",
+ "says": "carries more: tube cage, crates, jerrycan, roll",
+ "tris": 788,
+ "meshes": 1,
+ "size": [
+  0.902,
+  0.74,
+  0.725
+ ],
+ "min": [
+  -0.4509,
+  -0.4,
+  -0.72
+ ],
+ "max": [
+  0.4509,
+  0.34,
+  0.005
+ ],
+ "sockets": {
+  "Mount": [
+   0.0,
+   0.0,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/waist.py"
+}
