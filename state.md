@@ -323,6 +323,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Weapons lie horizontal in the inventory (Keith; Claude on `claude/project-thread-gbjf4z`)
+- Every weapon's grid footprint is wider than tall: hull guns swapped (rail 8×2, autocannon 5×2, rocket launcher 4×3...), held 3×2, long held 4×2, swords 4×1 / 3×1 / 4×2, shoulder gear 3×2 (`src/items/gridSize.ts`). Pictures were already drawn tall and turned when flat, so they lie along the footprint with no new art; the doll tile no longer turns them again. Old saved layouts: `syncGrid` re-places any item whose size changed, so weapons just land in the first free spot. Checked: `grid-check` updated, full `npm test` 108/108. Open for Keith: the held 2×2→3×2 and shoulder 2×2→3×2 growth (sliders, Item sizes).
+
 ### 2026-11-14 · Inventory: Protocol sockets back, socket pips, half-screen doll, Select and Scrap selected (Keith; Claude on `claude/project-thread-31xd5f`)
 - Sockets in the inventory again: drag a Protocol onto an item with a free socket (grid or doll; the ones that take it light green), or click it to socket it into the picked slot's item (else the first fitted item it fits). The panel under the doll shows the picked slot's item (or the one selected item) with its sockets: Remove, and the Protocols on hand that fit.
 - Socket pips on every item with sockets, in grids and on doll tiles: filled in the Protocol's rarity colour, hollow when free.
