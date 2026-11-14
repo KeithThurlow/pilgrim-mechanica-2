@@ -81,6 +81,26 @@ if (!near(root.position.x, 4.5)) fail(`after the change it blends again: ${root.
   if (set.models !== 0) fail("a removed model should leave the list");
   scene.add(m, loose); set.capture();
   if (set.models !== 2) fail(`added back: ${set.models} models`);
+  // A part added to a model after its first capture is picked up (the tree is only walked again when told).
+  const late = new THREE.Group(); m.add(late); set.capture();
+  if (set.parts !== 4) fail(`a part added later: ${set.parts} parts (4)`);
+  late.position.x = 0; set.capture(); late.position.x = 4; set.capture(); set.apply(0.5);
+  if (!near(late.position.x, 2)) fail(`a part added later should blend: ${late.position.x}`);
+  set.restore();
+  m.remove(late); set.capture();
+  if (set.parts !== 3) fail(`a part taken out: ${set.parts} parts (3)`);
+  // Hidden or off the screen: not captured; back, it holds its pose one tick and then blends.
+  m.position.x = 0; set.capture(); m.position.x = 2; set.capture();
+  m.visible = false; set.capture();
+  if (set.models !== 1 || set.asleep !== 1) fail(`hidden: ${set.models} models, ${set.asleep} asleep`);
+  m.visible = true; m.position.x = 10; set.capture(); set.apply(0.5);
+  if (m.position.x !== 10) fail(`back from hidden should hold its pose: ${m.position.x}`);
+  set.restore(); m.position.x = 12; set.capture(); set.apply(0.5);
+  if (!near(m.position.x, 11)) fail(`a tick after coming back it should blend: ${m.position.x}`);
+  set.restore();
+  set.inView = (r) => r !== m; set.capture();
+  if (set.asleep !== 1) fail(`off the screen: ${set.asleep} asleep`);
+  set.inView = null;
 }
 
 // Swarm slot arrays.
