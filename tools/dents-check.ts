@@ -76,11 +76,11 @@ const sumNet = (g: DentGrid) => { const v = g.volumes(); return v.berm - v.dep; 
   g.step(0, []);
   g.step(0.016, [brush(0, 0, 0.45, 0, 1.42, 0.1)]);
   const d0 = g.volumes().dep;
-  for (let t = 0; t < 60; t += 0.1) g.step(0.1, []);
+  for (let t = 0; t < 30; t += 0.1) g.step(0.1, []);
   const d60 = g.volumes().dep;
   for (let t = 0; t < 400; t += 0.5) g.step(0.5, []);
   const d460 = g.volumes().dep;
-  ok(d60 < d0 && d60 > d0 * 0.3, `a minute on sand: ${((d60 / d0) * 100).toFixed(0)}% of the print left (Keith: slumps back over a minute or two)`);
+  ok(d60 < d0 * 0.1, `30 s on sand: ${((d60 / d0) * 100).toFixed(1)}% of the print left (Keith 2026-11-14: prints gone after about 30 s)`);
   ok(d460 < d0 * 0.05, `about 8 minutes: ${((d460 / d0) * 100).toFixed(1)}% left`);
 }
 

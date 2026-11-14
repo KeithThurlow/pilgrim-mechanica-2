@@ -323,6 +323,8 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+- 2026-11-14: Sand prints (feet, convoy ruts) fade out in about 30 s: `dentSandLife` 90 → 9 s (time constant; ~4% left at 30 s). Slider still Dents › Sand › heals over. Off-screen memory forgets them sooner too (cheaper). `src/fx/dents.ts`, `tools/dents-check.ts` (30 s check). Checked: dents-check; npm test. Claude, for Keith.
+
 ### 2026-11-14 · Threat level falls anywhere near the convoy, and doesn't count there (Keith: "we don't want players luring enemies into range of the convoy to destroy them"; Claude on `claude/project-thread-5e54u3`)
 - Home is now within 250 m of the convoy (was 80; the tanks reach 140 m, escorts drive out): the threat falls there, and enemies spawned and drops rolled there use only the place's own depth, so a high-threat pack lured into the convoy's guns drops near-convoy gear.
 - Files: `src/expedition/runThreat.ts` (`effective(depth, home)`), `loop.ts` (`nearHome`). Checked: typecheck, `tools/runthreat-check.ts` (a place by the convoy ignores a 1500 m threat), `npm test`.

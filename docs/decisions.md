@@ -4,6 +4,7 @@ Newest first. Raised by / decided by: Keith or Claude. Only Keith's calls are ma
 
 | Date | Decision | Raised | Decided | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-14 | Sand prints fade over about 30 s (heal time constant 9 s, was 90), so trails do not pop in near the convoy. | Keith | Keith | Slider: Dents › Sand › heals over. |
 | 2026-11-14 | The threat level falls anywhere near the convoy (within 250 m, past the convoy's guns' reach), and enemies and drops there ignore it, so luring packs into the convoy's guns earns nothing extra. | Keith | Keith (the rule), Claude (250 m) | Open for Keith: the radius. |
 | 2026-11-14 | The convoy's radar is on only while the mech is aboard; out on the sand it is always the mech's own scope (no range edge, no sensor ring). | Keith | Keith | `convoyRadarAboard` 0 brings back the edge; Keith's message was cut off, so more may follow |
 | 2026-11-14 | A run threat level: difficulty and loot follow the deepest point reached from the convoy this run, never drop while out, and fall only aboard or within 80 m of the convoy (12 m/s). Enemy power, drop level and rarity, packs and raids use the deeper of the place's depth and the threat; world camps keep place-based counts. | Keith | Keith (the idea), Claude (the numbers) | Open for Keith: fall rate (12 m/s), home radius (80 m), whether time out should also creep it up (slider, 0 now), whether camps found on the way back should also get bigger, and whether bandits should take the power curve too (only robots do). |
