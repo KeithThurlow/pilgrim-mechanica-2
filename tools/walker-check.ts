@@ -524,5 +524,37 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
   if (problems.length) failed = true;
 }
 
+// Strafing (Keith 2026-11-14: the stilts' feet reached out in front strafing left and right): every leg type, on the
+// flat, walking and on Shift, straight and strafing with reversals every 3 s. A planted foot never sits further ahead of its hip
+// along the travel than 0.75 of what the leg reaches level at the walk's hip height (stilts were 1.08 before the fix).
+for (const leg of ["rampart", "rampart-stilt", "rampart-siege"] as const) {
+  const flat = new DuneField({ ...TERRAIN_DEFAULTS, height: 0, swell: 0, bumps: 0 });
+  const out: string[] = [], problems: string[] = [];
+  for (const shift of [false, true]) for (const strafe of [false, true]) {
+    const sim = new WalkerSim({ ...WALKER_DEFAULTS, ...LEG_TYPES[leg].values }, flat);
+    sim.reset(0, 0, 0);
+    const reach = sim.walkReach();
+    let ahead = 0, stretch = 0;
+    for (let i = 0, t = 0; i < 12 * 120; i++, t += 1 / 120) {
+      const x = strafe ? (Math.floor(t / 3) % 2 ? 1 : -1) : 0;
+      sim.update(1 / 120, { x, z: strafe ? 0 : 1, sprint: shift, face: 0 });
+      const sp = Math.hypot(sim.vel.x, sim.vel.z);
+      // Skipping the first 0.8 s after each reversal, while the legs swing round (the old trailing foot is ahead then).
+      if (t < 1.5 || sp < 0.5 || (strafe && t % 3 < 0.8)) continue;
+      for (const f of sim.feet) {
+        const P = f.pose;
+        stretch = Math.max(stretch, P.hip.distanceTo(P.ankle) / (sim.v.femur + sim.v.shin + sim.v.cannon));
+        if (!f.swinging) ahead = Math.max(ahead, ((f.pos.x - P.hip.x) * sim.vel.x + (f.pos.z - P.hip.z) * sim.vel.z) / sp / reach);
+      }
+    }
+    const name = `${shift ? "shift" : "walk"} ${strafe ? "strafe" : "straight"}`;
+    if (ahead > 0.75) problems.push(`${name}: a planted foot ${ahead.toFixed(2)} of the reach ahead of its hip`);
+    if (sim.stats.overreach > 0) problems.push(`${name}: ${sim.stats.overreach} reach misses`);
+    out.push(`${name} ahead ${ahead.toFixed(2)} stretch ${stretch.toFixed(2)}`);
+  }
+  console.log(`${problems.length ? "FAIL" : "ok  "} -- ${leg} plants: ${out.join(" · ")}` + (problems.length ? "\n       " + problems.join("; ") : ""));
+  if (problems.length) failed = true;
+}
+
 if (failed) throw new Error("walker check failed");
 console.log("walker check passed");

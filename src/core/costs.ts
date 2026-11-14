@@ -11,6 +11,11 @@ export class Costs {
   /** This frame's stages so far (ms), cleared by begin(): for a lab that keeps its own per-frame records (stress lab). */
   readonly frame = new Map<string, number>();
 
+  constructor() {
+    // For probes (tools/perf-stages.mjs): the last frame's stages, ms.
+    (globalThis as unknown as { __costs: () => Record<string, number> }).__costs = () => Object.fromEntries(this.frame);
+  }
+
   /** Start timing this frame's stages. */
   begin() { this.t = performance.now(); this.frame.clear(); }
 

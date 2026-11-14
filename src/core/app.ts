@@ -41,6 +41,9 @@ export interface App {
   hold: boolean;
 }
 
+/** Metres kept round a model's top parts when asking whether it's on the screen (a car's length, a strider's reach). */
+const INTERP_MARGIN = 16;
+
 export async function createApp(container: HTMLElement): Promise<App> {
   const params = new URLSearchParams(location.search);
   skipHiddenMatrices(!params.has("allmatrices"));
@@ -95,9 +98,31 @@ export async function createApp(container: HTMLElement): Promise<App> {
   const clock = clockFromUrl(params);
   // Every model on drawBetweenTicks' list is drawn between its last two ticks (stage 6c); swarm drawers (RobotsDraw...)
   // draw once per drawn frame, between ticks, instead of in the tick (6d).
+  let frameNo = 0;
   const interp = new InterpSet();
+  // Models off the screen aren't kept for drawing between ticks (?allinterp: all of them, as before). A model's place
+  // is taken from its top parts (some roots sit at the origin with their parts in world space), with room to spare.
+  if (!params.has("allinterp") && !params.has("norender")) {
+    const frustum = new THREE.Frustum(), pv = new THREE.Matrix4(), ball = new THREE.Sphere();
+    let stamp = -1;
+    interp.inView = (root) => {
+      if (stamp !== frameNo) { stamp = frameNo; frustum.setFromProjectionMatrix(pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); }
+      const kids = root.children, c = ball.center;
+      if (!kids.length) { c.setFromMatrixPosition(root.matrixWorld); ball.radius = INTERP_MARGIN; return frustum.intersectsSphere(ball); }
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+      for (let i = 0; i < kids.length; i++) {
+        const e = kids[i].matrixWorld.elements;
+        if (e[12] < x0) x0 = e[12]; if (e[12] > x1) x1 = e[12];
+        if (e[13] < y0) y0 = e[13]; if (e[13] > y1) y1 = e[13];
+        if (e[14] < z0) z0 = e[14]; if (e[14] > z1) z1 = e[14];
+      }
+      c.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      ball.radius = Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2 + INTERP_MARGIN;
+      return frustum.intersectsSphere(ball);
+    };
+  }
   setBetweenTicks(true);
-  hud.set("clock", () => `${clock.hud()}; ${interp.models} models (${interp.parts} parts) drawn between ticks`);
+  hud.set("clock", () => `${clock.hud()}; ${interp.models} models (${interp.parts} parts) drawn between ticks, ${interp.asleep} hidden or off the screen`);
   // ?dt=seconds: every drawn frame advances that much time, however long it took (repeatable headless shots, ?bench).
   const stepDt = params.has("dt") ? Number(params.get("dt")) || 0 : 0;
   const noRender = params.has("norender");
@@ -109,6 +134,7 @@ export async function createApp(container: HTMLElement): Promise<App> {
   hud.set("uploads", () => `instance uploads trimmed: ${up.trimmed} buffers, ${up.savedKB.toFixed(0)} KB a frame not sent; ${up.empty} empty pools not drawn`);
   renderer.setAnimationLoop(() => {
     const now = performance.now();
+    frameNo++;
     const real = (now - prev) / 1000, raw = stepDt || real;
     prev = now;
     const t0 = performance.now();
