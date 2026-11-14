@@ -48,7 +48,6 @@ const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
   const snap = (lo: Loadout) => SLOTS.map((s) => lo[s]?.id ?? "-").join(",");
   let n = 0;
   for (const b of BASES) {
-    if (b.kind === "protocol") continue;
     const it = makeItem(b.id, "rare", "cand-" + b.id), lo = defaultLoadout(), was = snap(lo);
     const pool = [makeItem("mg-light", "rare", "pool-mg")];
     for (const s of SLOTS) {
