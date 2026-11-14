@@ -92,6 +92,7 @@ import { runBench } from "../../src/core/bench";
 import { SwarmCamps } from "../../src/expedition/swarmCamps";
 import { BanditCamps } from "../../src/expedition/humans";
 import { SimHost, SIM_DEFAULTS, SIM_PARAMS, workerWanted } from "../../src/sim/host";
+import { GroundGrid, GROUND_GRID_DEFAULTS, GROUND_GRID_PARAMS } from "../../src/world/groundGrid";
 import { POI_PARAMS } from "../../src/world/pois";
 import { SITE_PARAMS } from "../../src/pois/kinds";
 import { CAMP_PARAMS } from "../../src/expedition/camps";
@@ -143,7 +144,7 @@ const V = {
   ...TERRAIN_DEFAULTS, ...STREAM_DEFAULTS, ...LOOK_DEFAULTS, ...DUST_DEFAULTS, ...DENT_DEFAULTS, ...MECH_DEFAULTS,
   ...ROUTE_DEFAULTS, ...PLATFORM_DEFAULTS, ...CRANE_DEFAULTS, ...CARRY_DEFAULTS, ...AIRLIFT_DEFAULTS, ...DECK_DEFAULTS,
   ...TRAIN_DEFAULTS, ...TRACK_DEFAULTS, ...CONVOY_SOUND_DEFAULTS, ...PIPE_DEFAULTS, ...TRAIL_DEFAULTS, ...ESCORT_DEFAULTS, ...DEFENCE_DEFAULTS, ...GUARD_DEFAULTS, ...GUARDIAN_DEFAULTS, ...DECK_MECH_DEFAULTS,
-  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS, ...SIM_DEFAULTS,
+  ...LOOP_DEFAULTS, ...PLOUGH_FX_DEFAULTS, ...ON_FOOT_DEFAULTS, ...WALKWAY_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...TARGET_DEFAULTS, ...WEAPON_DEFAULTS, ...SHOT_DEFAULTS, ...BAR_DEFAULTS, ...VITALS_DEFAULTS, ...DOLL_DEFAULTS, ...GRID_DEFAULTS, ...GRID_SIZE_DEFAULTS, ...CRATER_DEFAULTS, ...DEATH_DEFAULTS, ...SIM_DEFAULTS, ...GROUND_GRID_DEFAULTS,
   radius: 5, shadowBox: 60,
   // The convoy lab runs the day (Keith 2026-10-28); the other labs hold a fixed noon unless ?time= is given.
   dayCycle: 1, dayRun: 1, timeOfDay: 16,
@@ -156,7 +157,7 @@ const PARAMS: Param[] = [
   ...ON_FOOT_PARAMS, ...VITALS_PARAMS, ...DOLL_PARAMS, ...GRID_PARAMS, ...GRID_SIZE_PARAMS, ...WALKWAY_PARAMS, ...LOOT_PARAMS, ...LOADOUT_PARAMS, ...WEAPON_PARAMS, ...SHOT_PARAMS, ...BAR_PARAMS, ...TARGET_PARAMS,
   ...LOOP_PARAMS, ...ROUTE_PARAMS, ...PLOUGH_FX_PARAMS, ...TRAIN_PARAMS, ...PLATFORM_PARAMS, ...TRACK_PARAMS, ...CONVOY_SOUND_PARAMS, ...TRAIL_PARAMS, ...PIPE_PARAMS, ...ESCORT_PARAMS, ...DEFENCE_PARAMS, ...GUARD_PARAMS, ...GUARDIAN_PARAMS, ...DECK_MECH_PARAMS, ...CRANE_PARAMS, ...CARRY_PARAMS, ...AIRLIFT_PARAMS, ...DECK_PARAMS, ...MECH_PARAMS, ...WALKER_PARAMS, ...UPPER_PARAMS,
   ...MINIGUN_FX_PARAMS, ...DUST_PARAMS, ...DENT_PARAMS, ...SFX_PARAMS, ...TOON_PARAMS, ...ISO_PARAMS, ...TERRAIN_PARAMS,
-  ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS, ...SIM_PARAMS,
+  ...STREAM_PARAMS, ...LOOK_PARAMS, ...CRATER_PARAMS, ...DEATH_PARAMS, ...SIM_PARAMS, ...GROUND_GRID_PARAMS,
 ];
 
 // World: dunes with the convoy's road in them.
@@ -165,6 +166,10 @@ const field = new DuneField(V);
 if (params.has("flat")) { field.v = { ...V, height: 0, swell: 0, bumps: 0 }; field.update(); }
 const route = new ConvoyRoute(V, 0, 0);
 field.modifier = route;
+// The ground read back from a grid of exact heights (src/world/groundGrid.ts; Performance > Ground read from a grid,
+// ?groundgrid=0: every read worked out). Every ground change below is announced to it.
+const groundGrid = new GroundGrid(field);
+const gridOff = params.get("groundgrid") === "0";
 const streamer = new TerrainStreamer(field, V);
 scene.add(streamer.group);
 // As the plough's blade advances, the ground behind it changes in small boxes: patched in place a few per frame
@@ -176,6 +181,7 @@ const patchQueue: [number, number, number, number][] = [];
 const PATCH_STRIP = 4;
 let deathsRef: DeathPhysics | null = null, escortsRef: EscortGroup | null = null;
 route.onChange = (x0, z0, x1, z1) => {
+  groundGrid.invalidate(x0, z0, x1, z1);
   craters.invalidate(x0, z0, x1, z1);
   deathsRef?.groundChanged(x0, z0, x1, z1); // the plough's cut under the death physics' floor
   escortsRef?.invalidate(x0, z0, x1, z1); // and under the escorts' planning copy
@@ -215,7 +221,7 @@ deathsRef = deaths;
 const deadDraw = new DeadDraw(deaths);
 scene.add(deadDraw.group);
 let craterPatches = 0;
-const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(x0, z0, x1, z1); escortsRef?.invalidate(x0, z0, x1, z1); };
+const groundChanged = (x0: number, z0: number, x1: number, z1: number) => { groundGrid.invalidate(x0, z0, x1, z1); streamer.queuePatch(x0, z0, x1, z1); craterPatches++; deaths.groundChanged(x0, z0, x1, z1); escortsRef?.invalidate(x0, z0, x1, z1); };
 const flushGround = () => { if (craterPatches) { streamer.flushPatches(); craterPatches = 0; } };
 bf.onGround = groundChanged;
 
@@ -279,9 +285,10 @@ bf.fx.own = player.sim.pos; // the effects budget keeps the local player's at fu
 const sim = player.sim;
 // The expedition: POIs, salvage and swarm camps out in the sand, the at-risk list, fuel, the radar and the HUD.
 const banditVat = await loadBanditVat().catch((e) => { console.warn("bandit bake not loaded, boxes instead:", e); return null; });
-const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.invalidate(x0, z0, x1, z1); }, deaths });
-const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.height(x, z)) : null;
+const loop = new ExpeditionLoop(V, field, bf, scene, camera, route, convoy, carry, player, { vat: banditVat, groundChanged: (x0, z0, x1, z1) => { groundGrid.invalidate(x0, z0, x1, z1); streamer.rebuildArea(x0, z0, x1, z1); deaths.groundChanged(x0, z0, x1, z1); escorts.invalidate(x0, z0, x1, z1); }, deaths });
+const simHost = groundRec ? new SimHost(V, groundRec, route, (x, z) => field.heightExact(x, z)) : null;
 if (simHost) app.hud.set("sim", () => simHost.line());
+app.hud.set("ground grid", () => { const g = groundGrid.takeStats(); return field.grid ? `ground grid: ${g.reads} reads and ${g.made} heights worked out since this line was last read (${g.reads ? ((100 * g.made) / g.reads).toFixed(0) : 0}%)` : "ground grid: off (every read worked out)"; });
 if (simHost) { simHost.terrain(streamer); if (bf.patch) simHost.detail(bf.patch); simHost.escorts(escorts, convoy); simHost.robots(loop.swarms.sw, SwarmCamps.SEED); simHost.infantry(loop.banditCamps.sw, 0, BanditCamps.SEED); simHost.deaths(deaths); }
 // The convoy fights back (Keith 2026-11-01): the turrets and escorts fire (src/convoy/guard.ts), guardian mechs walk
 // beside the cars (src/convoy/guardians.ts; bodies load in the background), and enemies steer out of the safe zone
@@ -527,8 +534,10 @@ addEventListener("keydown", (e) => {
 
 /** Start over: convoy at the origin, mech off to its left (or in the bay). */
 function restart() {
+  groundGrid.clear();
   loop.restart(0, 0);
   convoy.reset(0, 0);
+  groundGrid.clear();
   patchQueue.length = 0;
   // ?crest[=metres]: the convoy clock moved on until the blade is that far short of a big dune crest.
   if (params.has("crest")) {
@@ -539,9 +548,10 @@ function restart() {
         const c = route.wake.cutAt(s);
         if (c > best) { best = c; at = s; }
       }
-      if (best < 260) convoy.jump(route.s + 100);
+      if (best < 260) { convoy.jump(route.s + 100); groundGrid.clear(); }
     }
     convoy.jump(route.s + (at - short - route.blade));
+    groundGrid.clear();
   }
   escorts.reset();
   guardians.reset();
@@ -778,6 +788,7 @@ const panel = tweakPanel({
     // A slider the unlocks scale: what was set is the new base (the shown value stays base × the unlock's step).
     if ((UNLOCK_RADAR_KEYS as readonly string[]).includes(k)) unlockBase[k] = (V as unknown as Record<string, number>)[k] / appliedRadar;
     if ((UNLOCK_CRANE_KEYS as readonly string[]).includes(k)) unlockBase[k] = (V as unknown as Record<string, number>)[k] / appliedCrane;
+    groundGrid.clear();
     if (shapeKeys.has(k)) { field.update(); route.wake.clear(); streamer.rebuildAll(); }
     // The road reindexes itself (and works its berms out again) on its next step; the chunks need building again.
     if (roadKeys.has(k)) { route.wake.clear(); streamer.rebuildAll(); }
@@ -947,6 +958,10 @@ const holdF = Number(params.get("holdf") ?? 0);
 // ?bench: the same scene played with the sim worker and with ?noworker, measured, side by side (src/core/bench.ts).
 runBench(app.hud, [{ label: "worker", flag: "" }, { label: "noworker", flag: "noworker" }]);
 app.onTick((rawDt) => {
+  // The ground grid: on or off by its slider, its heights aged by the tick.
+  field.grid = V.groundGrid > 0.5 && !gridOff ? groundGrid : null;
+  groundGrid.ttl = Math.max(1, Math.round(V.groundGridTtl / Math.max(1e-3, rawDt)));
+  groundGrid.tick();
   if (bigClose) holdOnBucket();
   // A heavy melee hit slows the fight a moment (src/game/hitStop.ts).
   const dt = rawDt * hitStop.dtScale(rawDt);
