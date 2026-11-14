@@ -18,6 +18,16 @@ export const LOOT_DEFAULTS = {
   weightLegendary: 0.4,
   weightMythic: 0.06,
   protocolShare: 0.2,
+  // What slot a random part or weapon is for, picked first, then a base inside it by the bases' own drop weights
+  // (Claude 2026-11-14, Keith: "doesn't feel like other items other than weapons are dropping", shoulder weapons
+  // unseen). Was one pool by base: 28 weapon bases made 47% of rolls, each other slot ~7%, shoulder launchers ~8%.
+  kindWeapon: 30,
+  kindShoulder: 20,
+  kindLegs: 10,
+  kindHull: 10,
+  kindSensor: 10,
+  kindPack: 10,
+  kindWaist: 10,
   sensorRangePerTier: 0.1,
   levelGrowth: 0.05,
   enemyGrowth: 0.075,
@@ -25,7 +35,7 @@ export const LOOT_DEFAULTS = {
 };
 export type LootValues = typeof LOOT_DEFAULTS;
 
-const G = "Loot rolls";
+const G = "Loot rolls", GK = "Loot slot mix";
 export const LOOT_PARAMS: Param[] = [
   { key: "rarityWiden", label: "Rarity widens rolls (per tier)", min: 0, max: 2, step: 0.05, group: G, tip: "Each tier above Common widens a stat's range both ways by this share of its Common width: rarer is wilder, not always better" },
   { key: "rarityLift", label: "Rarity lifts rolls (per tier)", min: 0, max: 1, step: 0.01, group: G, tip: "Each tier above Common moves the middle of a roll toward better by this share of its Common width; kept below the widening, rarer rolls still reach past Common both ways" },
@@ -39,6 +49,13 @@ export const LOOT_PARAMS: Param[] = [
   { key: "levelGrowth", label: "Item power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "An item's damage and hull grow by this share per level above 1 (P(n) = 1 + this × (n − 1); hull by 0.6 of it, a few utility stats by part of it, rate and feel not at all). 0.05 (Keith 2026-10-31: items scaled too fast; was 0.075): a level-7 drop from 850 m out hits 1.3× a level-1 one" },
   { key: "enemyGrowth", label: "Enemy power per level", min: 0, max: 0.3, step: 0.005, group: G, tip: "Robots spawned at an area's level (1 + depth / item level per m) take 1 + this × (level − 1) on health and damage. Above the item curve, so going deeper is harder even with the loot found there (0.075: 1.43× at 850 m against the items' 1.3×)" },
   { key: "enemyLevels", label: "Enemies grow with area level (0/1)", min: 0, max: 1, step: 1, group: G, tip: "1: robots spawned out deep take the enemy power curve on health and damage; 0: every robot at level 1" },
+  { key: "kindWeapon", label: "Slot share: arm weapons", min: 0, max: 100, step: 1, group: GK, tip: "A random part or weapon picks its slot first by these weights, then a base in it. Arm and held weapons" },
+  { key: "kindShoulder", label: "Slot share: shoulder gear", min: 0, max: 100, step: 1, group: GK, tip: "Launchers (rockets, missiles, mortars, napalm) about 60% of it, feeds, power and summoner gear the rest" },
+  { key: "kindLegs", label: "Slot share: legs", min: 0, max: 100, step: 1, group: GK },
+  { key: "kindHull", label: "Slot share: hulls", min: 0, max: 100, step: 1, group: GK },
+  { key: "kindSensor", label: "Slot share: sensors", min: 0, max: 100, step: 1, group: GK },
+  { key: "kindPack", label: "Slot share: packs", min: 0, max: 100, step: 1, group: GK },
+  { key: "kindWaist", label: "Slot share: waist", min: 0, max: 100, step: 1, group: GK },
   { key: "protocolShare", label: "Protocols in random loot", min: 0, max: 1, step: 0.01, group: G, tip: "Share of random rolls that come up a Protocol instead of a part or weapon" },
 ];
 
@@ -60,6 +77,12 @@ function pick<T>(r: () => number, list: readonly T[], weight: (t: T) => number):
   for (const t of list) { x -= Math.max(0, weight(t)); if (x < 0) return t; }
   return list[list.length - 1];
 }
+
+/** Each droppable kind's weight (a kind with no droppable base never comes up). */
+export function kindWeights(v: LootValues): Partial<Record<ItemKind, number>> {
+  return { weapon: v.kindWeapon ?? 30, shoulder: v.kindShoulder ?? 20, legs: v.kindLegs ?? 10, hull: v.kindHull ?? 10, sensor: v.kindSensor ?? 10, pack: v.kindPack ?? 10, waist: v.kindWaist ?? 10 };
+}
+const DROP_KINDS = [...new Set(BASES.filter((b) => b.drop > 0).map((b) => b.kind))];
 
 const weightOf = (v: LootValues, r: Rarity) =>
   ({ common: v.weightCommon, uncommon: v.weightUncommon, rare: v.weightRare, epic: v.weightEpic, legendary: v.weightLegendary, mythic: v.weightMythic })[r];
@@ -101,7 +124,9 @@ export interface RollOptions {
 /** Roll one part or weapon from a seed. */
 export function rollItem(seed: number, v: LootValues, o: RollOptions = {}): Item {
   const r = rng(seed);
-  const pool = o.base ? [BASE_BY_ID[o.base]] : BASES.filter((b) => !o.kind || b.kind === o.kind);
+  let kind = o.kind;
+  if (!o.base && !kind) { const kw = kindWeights(v); kind = pick(r, DROP_KINDS, (k) => kw[k] ?? 0); }
+  const pool = o.base ? [BASE_BY_ID[o.base]] : BASES.filter((b) => b.kind === kind);
   const b = pick(r, pool, (x) => x.drop);
   const rarity = o.rarity ?? pick(r, RARITIES, (x) => weightOf(v, x));
   const level = Math.max(1, Math.round(o.level ?? 1));

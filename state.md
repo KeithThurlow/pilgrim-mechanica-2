@@ -323,6 +323,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-14 · Loot slot mix: every slot drops, shoulder launchers more often (Keith; Claude on `claude/project-thread-5qd0w5`)
+- Keith felt only weapons dropped and wasn't sure he'd seen a shoulder weapon. Measured (40k field drops): weapons 38% (+ weapon quads' own gun drops on top), Protocols 20%, legs/hull/sensor/pack/waist ~6% each, shoulder launchers 6.6% (five of them, ~1.3% each). Cause: one pool picked by base, and 28 weapon bases outweighed everything.
+- Now a random part or weapon picks its slot first (`kindWeapon` 30, `kindShoulder` 20, legs/hull/sensor/pack/waist 10 each; group "Loot slot mix", Loot topics), then a base in it by the bases' drop weights. Shoulder launchers' drop weights up (rocket 1.5, missile pod 1.5, mortars 1.2, napalm 1). Measured after: weapons 24%, Protocols 20%, shoulder 16% (launchers 9.7%), each other slot ~8%.
+- Files: `src/items/generate.ts` (`kindWeights`, `rollItem`), `src/items/bases.ts`, topic lists in `src/expedition/loop.ts` and the loadout, convoy, inventory labs; new `tools/lootmix-check.ts` (each slot ≥ 6%, weapons ≤ 40%, launchers ≥ 8%, every droppable base turns up). Checked: `npm test` 110/110.
+
 ### 2026-11-14 · Inventory: Protocol sockets back, socket pips, half-screen doll, Select and Scrap selected (Keith; Claude on `claude/project-thread-31xd5f`)
 - Sockets in the inventory again: drag a Protocol onto an item with a free socket (grid or doll; the ones that take it light green), or click it to socket it into the picked slot's item (else the first fitted item it fits). The panel under the doll shows the picked slot's item (or the one selected item) with its sockets: Remove, and the Protocols on hand that fit.
 - Socket pips on every item with sockets, in grids and on doll tiles: filled in the Protocol's rarity colour, hollow when free.
