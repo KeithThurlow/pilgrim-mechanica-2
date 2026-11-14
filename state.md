@@ -330,6 +330,12 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Threat level: bandit camps stream in as big as the deeper of their place and the run's threat says, bandits' health × the threat's enemy power, war band columns sized by it, lances and guards grade by it.
 - Checked: new `tools/lances-check.ts` (topping up, hunting, shares, seeded guards, grades; a 20 min trip at mid depth: 10 mech lances to 19 robot groups), `scaling-check` samples 3× the camps (fewer now), full `npm test`; a headless convoy-lab run with `?lance=2`: two Ramparts came on and fought, no errors.
 
+
+### 2026-11-14 · Held weapons' hands stay apart when the aim is close (Keith; Claude on `claude/project-thread-onhni1`)
+- `src/mech/upper.ts`: new slider Held weapons › closest aim (`heldMinAim`, 5 m): a held weapon's aim nearer than this to the shoulders' middle is pushed out along its line, so sword arms converge but the hands never overlap. Applies to every held weapon (breaker, buster, light sword). Checked: typecheck, `npm test` 111/111. Not looked at in game; open question: is 5 m right per sword?
+
+
+- 2026-11-14: Sand prints (feet, convoy ruts) fade out in about 30 s: `dentSandLife` 90 → 9 s (time constant; ~4% left at 30 s). Slider still Dents › Sand › heals over. Off-screen memory forgets them sooner too (cheaper). `src/fx/dents.ts`, `tools/dents-check.ts` (30 s check). Checked: dents-check; npm test. Claude, for Keith.
 ### 2026-11-14 · Gear comparison shows what the whole mech gets, soft limits counted (Keith; Claude on `claude/project-thread-5rk08q`)
 - `src/items/compare.ts` (pure): `compareFit` fits the item into a copy of the loadout as a click would (`fitWithHeld`), resolves both and lists what changes: sustained DPS of all weapons, walk, sprint, speed-up and turn after leg load, load and the legs' best load, hull, armour, reactor and the biggest energy shot, cargo cells, radar, power, then the per-gun details; warnings when a fit goes over or back under the legs' best load, or makes the mech underpowered or clears it; what comes off. `slotFor` is the slot a click picks (the inventory's equip uses it too).
 - Inventory card (`src/ui/inventory.ts`): the old "+N dps · +N power vs fitted" line is now this comparison, into the slot a click would fit; dragging an item over a doll slot it fits shows the comparison for that slot. Bay hover (`src/ui/bay.ts`) uses the same module (gains DPS, speed-up and the warnings).
@@ -340,6 +346,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 - Files: `src/expedition/runThreat.ts` (`effective(depth, home)`), `loop.ts` (`nearHome`). Checked: typecheck, `tools/runthreat-check.ts` (a place by the convoy ignores a 1500 m threat), `npm test`.
 - Try: convoy lab `?out&runthreat=1500`: kills out at 280 m drop ~level 11; walk inside 250 m of the convoy: THREAT turns green ▼ and kills there drop ~level 1-2.
 
+### 2026-11-14 · Arms by hull, slimmer Salvager hull, no arms on the doll (Keith; Claude on `claude/project-thread-yjrqik`)
+- Four modelled arms replace the box arms, one per hull (`Base.arm`): `arm-rampart`, `arm-siege` (new item; the Siege had the Loader's), `arm-loader` (Salvager), `arm-wildcat` (Cuirass). Built by `tools/blender/parts/arms.py` into `public/models/parts/arm-*.glb` (1.3k-2.5k tris); `armFromGlb` (`src/mech/partModels.ts`) reads the pieces, `rampart.ts` `fitArm` swaps them in when the hull's `parts.armId` changes, and each bone now turns about the elbow's hinge so the arm's front stays on the inside of the bend.
+- Salvager hull squeezed across in its Blender script (`slim_k`: ×0.86 to the belt, ×0.74 at the roof), shoulders and gun empties in with it: torso ±1.12 → ±0.96 m, shoulders ±1.02 → ±0.86 m.
+- Inventory doll: a mount holding the hull's arm shows as an empty mount; the silhouette's arm lights with the held weapon.
+- Checked: `npm run check`, `npm test`, two loadout-lab shots (Salvager and Rampart arms holding a minigun).
 ### 2026-11-14 · Convoy radar only aboard (Keith; Claude on `claude/project-thread-f8uouj`)
 - Keith: the convoy radar should only be on while you're on the convoy; the changing range ring for the player felt weird. The big convoy scope now shows only while the mech is aboard (`convoyRadarAboard` 1; 0 brings back the 450 m range edge); out on the sand it's always the mech's own scope. The sensor-range ring and the range-edge ring are gone. `src/expedition/radar.ts`, `radarDraw.ts`; `expedition-check` (convoy scope off the convoy is refused, the old edge still works at 0); full `npm test`.
 

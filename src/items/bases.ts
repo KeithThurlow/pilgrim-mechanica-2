@@ -259,7 +259,7 @@ export const BASES: Base[] = [
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["front", "top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(HULL_POINTS, 0.08), armour: s(HULL_ARMOUR, 0.1), torsoTurnRate: s(U.torsoTurnRate, 0.08), reactorCap: s(REACTOR_DEFAULTS.reactorCap, 0.1), reactorRegen: s(REACTOR_DEFAULTS.reactorRegen, 0.1) },
   },
   {
-    id: "hull-siege", name: "Siege hull", kind: "hull", arm: "arm-loader", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
+    id: "hull-siege", name: "Siege hull", kind: "hull", arm: "arm-siege", tags: ["hull"], weight: 9.5, makers: ["Suzaku"], look: "rampart-siege", drop: 1, ability: "weld",
     // Armoured all over the front: sensors only up on top.
     mounts: { hull: [{ side: "L", takes: ["hullWeapon", "arm"] }, { side: "R", takes: ["hullWeapon", "arm"] }], sensor: ["top"], pack: true, waist: ["L", "R"] }, stats: { hull: s(4200, 0.08), armour: s(12, 0.1), torsoTurnRate: s(110, 0.08), reactorCap: s(5.5, 0.1), reactorRegen: s(0.32, 0.1) },
   },
@@ -309,6 +309,12 @@ export const BASES: Base[] = [
   {
     id: "arm-wildcat", name: "Wildcat arm", kind: "arm", tags: ["arm"], weight: 1.1, makers: ["Novus-Lux"], look: "rampart-wildcat", drop: 0,
     stats: { track: s(24, 0.1), arc: s(48, 0.1), salvage: s(0.15, 0.2) },
+  },
+  {
+    // The Siege's own arm (Keith 2026-11-14: the Siege is the Rampart's hull, so the Rampart's arm, heavier; it had the
+    // Loader's): a touch quicker than the Loader, slower than the Rampart's, strips a little faster than the Rampart's.
+    id: "arm-siege", name: "Siege arm", kind: "arm", tags: ["arm"], weight: 1.9, makers: ["Suzaku"], look: "rampart-siege", drop: 0,
+    stats: { track: s(15, 0.1), arc: s(36, 0.1), salvage: s(0.3, 0.2) },
   },
   {
     id: "arm-loader", name: "Loader arm", kind: "arm", tags: ["arm"], weight: 1.8, makers: ["Suzaku"], look: "rampart-salvager", drop: 0,

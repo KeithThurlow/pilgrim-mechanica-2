@@ -48,7 +48,7 @@ from mil_kit import V  # noqa: E402
 import rampart as HD1  # noqa: E402
 import rampart_v2 as R2  # noqa: E402
 import rampart_v4 as R  # noqa: E402
-from rampart_v4 import HIP_Z, GX, GZ, POSE, joints  # noqa: E402,F401  (read by export_game.py)
+from rampart_v4 import HIP_Z, GX, GZ, POSE  # noqa: E402,F401  (read by export_game.py)
 from rampart_v4 import ccw, mx, rrect, ellipse, sym, slab, scoop, shell, panel, flanges, region, Layers, span, rect  # noqa: E402
 from rampart_v4 import mframe, new_part, frame3, recol, flagall  # noqa: E402
 
@@ -594,15 +594,68 @@ def arm_l():
 R.torso = torso
 R.arm_r = arm_r
 R.arm_l = arm_l
-build_full = R.build_full
-build_mass = R.build_mass
+
+
+# ------------------------------------------------------------------------------------------------------ slimmed (2026-11-14)
+# Keith 2026-11-14: "Salvage hull is conceptually kind of cool, but it's too wide, a little too boxy". The whole torso (cab,
+# housings, shoulder drums, cage, rack) is squeezed across, more towards the roof so the flanks tumble home harder, and the
+# shoulders (and the guns hung on them) come in with it. Done on the built meshes in world space, so every detail keeps its
+# place on the cab; the joints say the same, so the game's arms and guns hang at the new shoulders.
+SLIM_LOW, SLIM_HIGH, SLIM_Z0, SLIM_Z1 = 0.86, 0.74, 4.12, 5.10
+
+
+def slim_k(z):
+    """The across-squeeze at height z: SLIM_LOW up to the belt crease, easing to SLIM_HIGH at the roof."""
+    t = min(1.0, max(0.0, (z - SLIM_Z0) / (SLIM_Z1 - SLIM_Z0)))
+    return SLIM_LOW + (SLIM_HIGH - SLIM_LOW) * t * t * (3 - 2 * t)
+
+
+_R_JOINTS = R.joints
+
+
+def joints():
+    j = _R_JOINTS()
+    for sfx in ("_L", "_R"):
+        a = j["Arm" + sfx]
+        j["Arm" + sfx] = V3((a.x * slim_k(a.z), a.y, a.z))
+    return j
+
+
+R.joints = joints
+
+
+def _slim(objs):
+    bpy.context.view_layer.update()
+    for o in objs:
+        if not o.name.startswith("Torso__"):
+            continue
+        mw = o.matrix_world.copy()
+        inv = mw.inverted()
+        for v in o.data.vertices:
+            w = mw @ v.co
+            w.x *= slim_k(w.z)
+            v.co = inv @ w
+        o.data.update()
+
+
+def build_full(layers=None):
+    root, objs, info = R.build_full(layers)
+    _slim(objs)
+    return root, objs, info
+
+
+def build_mass(*a, **k):
+    root, objs, info = R.build_mass(*a, **k)
+    _slim(objs)
+    return root, objs, info
 
 
 # --------------------------------------------------------------------------------------------------------------- export
 def export_gun_points():
     """The right gun's empties only (rampart_v4's default also writes the rocket box's muzzles, which this variant lacks)."""
-    return {"PodSpin_R": V3((GX, -0.50, GZ)), "PodSpinFwd_R": V3((GX, -1.00, GZ)), "PodMuzzle0_R": V3((GX, -1.90, GZ)),
-            "PodEject_R": V3((GX - 0.37, -0.20, 4.00))}
+    dx = joints()["Arm_R"].x - _R_JOINTS()["Arm_R"].x       # the gun came in with the slimmed shoulder
+    return {"PodSpin_R": V3((GX + dx, -0.50, GZ)), "PodSpinFwd_R": V3((GX + dx, -1.00, GZ)), "PodMuzzle0_R": V3((GX + dx, -1.90, GZ)),
+            "PodEject_R": V3((GX + dx - 0.37, -0.20, 4.00))}
 
 
 def export_split_guns(parts, split_off):
@@ -613,8 +666,10 @@ def export_split_guns(parts, split_off):
         bpy.data.objects.remove(arm_l_obj, do_unlink=True)
     out = {}
 
+    gx = GX + joints()["Arm_R"].x - _R_JOINTS()["Arm_R"].x  # the gun came in with the slimmed shoulder
+
     def rad(p):
-        return ((p.x - GX) ** 2 + (p.z - GZ) ** 2) ** 0.5
+        return ((p.x - gx) ** 2 + (p.z - GZ) ** 2) ** 0.5
 
     def gat(c, pts):
         return c.y < -0.46 and rad(c) < 0.15 and max(rad(p) for p in pts) < 0.25
