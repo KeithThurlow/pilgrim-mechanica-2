@@ -1,0 +1,48 @@
+{
+ "id": "sixWheeler",
+ "kind": "vehicle",
+ "name": "Six-wheeler",
+ "maker": "War band",
+ "says": "the long gun: tandem rear, pedestal ring in sandbags, jerrycans",
+ "tris": 5800,
+ "meshes": 4,
+ "size": [
+  2.78,
+  3.111,
+  7.718
+ ],
+ "min": [
+  -1.39,
+  -0.79,
+  -3.8681
+ ],
+ "max": [
+  1.39,
+  2.3207,
+  3.8502
+ ],
+ "sockets": {
+  "Turret": [
+   0.0,
+   1.02,
+   -1.76
+  ]
+ },
+ "moving": {
+  "Paint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Wheel": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/warband.py"
+}

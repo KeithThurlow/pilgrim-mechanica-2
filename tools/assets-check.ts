@@ -30,7 +30,7 @@ const RULES: Record<string, { tris: number; sockets: string[]; half: [number, nu
   // Shoulder gear, the summoner shoulders and the strikes, standing on the shoulder mount (the quake hammer 1.8 m tall).
   shoulder: { tris: 1500, sockets: [], half: [0.7, 1.9, 0.9] },
   // A vehicle's body, painted panels, lamps and one wheel (tools/blender/parts/warband.py), built to its kind's default tuning.
-  vehicle: { tris: 12000, sockets: ["Turret"], half: [1.8, 2.6, 3.4] },
+  vehicle: { tris: 12000, sockets: ["Turret"], half: [1.8, 2.8, 4.2] },
 };
 
 interface Gltf {
