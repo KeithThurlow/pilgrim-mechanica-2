@@ -41,7 +41,13 @@ export interface ChargeView { on: boolean; at: Vec3; k: number }
 /** A plasma bolt or a particle orb in flight (host: its damage; the draw reads pos). */
 export interface Orb { cls: "plasma" | "orb"; pos: THREE.Vector3; dir: THREE.Vector3; speed: number; left: number; damage: number; ap: number; radius: number; pop: number; tick: number; ticks: number; zaps: number; age: number; seed: number }
 /** A lance's burst of light where it landed (cosmetic): r the burst's radius, ground the sand's height under it. */
-export interface Nova { at: Vec3; ground: number; r: number; power: number; age: number; life: number; seed: number }
+export interface Nova { at: Vec3; ground: number; r: number; power: number; age: number; life: number; seed: number; cls?: "lance" | "sunder" }
+/** A body lit up by a hit this moment (cosmetic, Keith 2026-11-15: impact you can see): a sunder beam's white-gold glare
+ *  on what it burns, an arc's blue-white flash on what it strikes. r: about the body's size. */
+export interface Flare { cls: "sunder" | "arc"; x: number; y: number; z: number; r: number; age: number; life: number }
+/** An enemy an arc struck, crackling with left-over charge for a while (cosmetic): follows it by its id. */
+export interface Shock { id: unknown; x: number; y: number; z: number; r: number; age: number; life: number; seed: number }
+const MAX_FLARES = 64, MAX_SHOCKS = 40;
 /** A lightning strike for the draw: the chain of points from the muzzle through each target (or to the sand). */
 export interface Arc { pts: Vec3[]; age: number; life: number; seed: number }
 
@@ -57,6 +63,8 @@ interface ESide {
   charge: ChargeView;
   /** Sunder: the aim line while it charges (k: the charge). */
   tele: BeamView & { k: number };
+  /** Sunder: where the beam touched the sand at the last scorch (the scorch runs from there), or none. */
+  scorchAt: Vec3 | null;
   loop: Loop | null;
   whined: boolean;
 }
@@ -74,6 +82,9 @@ export class EnergyGuns {
   readonly orbs: Orb[] = [];
   readonly arcs: Arc[] = [];
   readonly novas: Nova[] = [];
+  /** Bodies lit by hits now, and enemies still crackling from an arc (cosmetic; capped, the oldest go first). */
+  readonly flares: Flare[] = [];
+  readonly shocks: Shock[] = [];
   /** Damage dealt by the last shot or tick per kind (the weapons lab's readout). */
   readonly last: Record<string, number> = {};
   /** Camera shake and the per-shot readout (the arsenal's hooks). */
@@ -90,7 +101,7 @@ export class EnergyGuns {
     /** Targets when the register is empty (the lab's candidates). */
     private candidates: () => TargetCandidate[] = () => []) {
     const side = (): ESide => ({ cls: null, own: null, sim: new EnergySim(), dir: new THREE.Vector3(0, 0, 1), beam: { on: false, from: v3(), to: v3(), hit: false, age: 0 },
-      charge: { on: false, at: v3(), k: 0 }, tele: { on: false, from: v3(), to: v3(), hit: false, age: 0, k: 0 }, loop: null, whined: false });
+      charge: { on: false, at: v3(), k: 0 }, tele: { on: false, from: v3(), to: v3(), hit: false, age: 0, k: 0 }, scorchAt: null, loop: null, whined: false });
     this.sides = [side(), side()];
     addEnergySounds(bf.sfx, v);
   }
@@ -100,6 +111,9 @@ export class EnergyGuns {
     this.quiet(s);
     s.cls = cls; s.own = own; s.proto = proto; s.sim = new EnergySim();
   }
+
+  /** The sand's height (the draw lays its light pools on it). */
+  readonly groundAt = (x: number, z: number) => this.bf.field.height(x, z);
 
   stats(i: number): EnergyStats | null { const s = this.sides[i]; return s.cls ? withProtocols(energyStats(s.cls, s.own, this.v), s.proto) : null; }
 
@@ -156,6 +170,44 @@ export class EnergyGuns {
     for (const n of this.novas) n.age += dt;
     for (let k = this.novas.length - 1; k >= 0; k--) if (this.novas[k].age > this.novas[k].life) this.novas.splice(k, 1);
     for (let k = this.orbs.length - 1; k >= 0; k--) if (!this.fly(this.orbs[k], dt)) this.orbs.splice(k, 1);
+    for (const f of this.flares) f.age += dt;
+    for (let k = this.flares.length - 1; k >= 0; k--) if (this.flares[k].age > this.flares[k].life) this.flares.splice(k, 1);
+    // Shocks ride on the body they struck (gone: they crackle out where it fell).
+    for (let k = this.shocks.length - 1; k >= 0; k--) {
+      const sh = this.shocks[k];
+      sh.age += dt;
+      if (sh.age > sh.life) { this.shocks.splice(k, 1); continue; }
+      const p = this.whereIs(sh.id);
+      if (p) { sh.x = p.x; sh.y = p.y; sh.z = p.z; } else if (sh.age < sh.life - 0.25) sh.age = sh.life - 0.25;
+    }
+  }
+
+  private flare(cls: Flare["cls"], x: number, y: number, z: number, r: number, life: number) {
+    if (life <= 0) return;
+    const f: Flare = this.flares.length >= MAX_FLARES ? this.flares.shift()! : { cls, x: 0, y: 0, z: 0, r: 0, age: 0, life: 0 };
+    f.cls = cls; f.x = x; f.y = y; f.z = z; f.r = r; f.age = 0; f.life = life;
+    this.flares.push(f);
+  }
+
+  /** An arc struck this enemy: it crackles for arcCrackle s (struck again: renewed). */
+  private shock(id: unknown, x: number, y: number, z: number, r: number) {
+    const life = this.v.arcCrackle;
+    if (!(life > 0) || id === null || id === undefined) return;
+    for (const sh of this.shocks) if (sh.id === id) { sh.age = 0; sh.life = life; sh.x = x; sh.y = y; sh.z = z; sh.r = r; return; }
+    if (this.shocks.length >= MAX_SHOCKS) this.shocks.shift();
+    this.shocks.push({ id, x, y, z, r, age: 0, life, seed: Math.random() * 1000 });
+  }
+
+  /** Where an enemy (by its register id or candidate key) is now; null: gone. */
+  private whereIs(id: unknown): { x: number; y: number; z: number } | null {
+    const reg = this.bf.register;
+    if (reg.stamp > 0 && reg.count > 0) {
+      if (typeof id !== "number") return null;
+      const e = reg.find(id);
+      return e < 0 ? null : { x: reg.x[e], y: reg.y[e], z: reg.z[e] };
+    }
+    for (const c of this.candidates()) if (c.key === id) return c;
+    return null;
   }
 
   /** Everything off: a dead owner, a refit. */
@@ -384,19 +436,19 @@ export class EnergyGuns {
   private nearBuf: number[] = [];
 
   /** Enemy points near (x, z) within R: from the register, else the lab's candidates. */
-  private enemiesNear(x: number, z: number, R: number, out: { x: number; y: number; z: number; id: unknown }[]) {
+  private enemiesNear(x: number, z: number, R: number, out: { x: number; y: number; z: number; r: number; id: unknown }[]) {
     out.length = 0;
     const reg = this.bf.register;
     if (reg.stamp > 0 && reg.count > 0) {
       this.filter.notTeam = this.unit.team;
       reg.near(x, z, R, this.filter, this.nearBuf);
-      for (const e of this.nearBuf) out.push({ x: reg.x[e], y: reg.y[e], z: reg.z[e], id: reg.id[e] });
+      for (const e of this.nearBuf) out.push({ x: reg.x[e], y: reg.y[e], z: reg.z[e], r: reg.r[e], id: reg.id[e] });
       return out;
     }
-    for (const c of this.candidates()) if (Math.hypot(c.x - x, c.z - z) <= R) out.push({ x: c.x, y: c.y, z: c.z, id: c.key });
+    for (const c of this.candidates()) if (Math.hypot(c.x - x, c.z - z) <= R) out.push({ x: c.x, y: c.y, z: c.z, r: c.r, id: c.key });
     return out;
   }
-  private found: { x: number; y: number; z: number; id: unknown }[] = [];
+  private found: { x: number; y: number; z: number; r: number; id: unknown }[] = [];
 
   private zap(st: EnergyStats, muzzle: THREE.Vector3, d: THREE.Vector3, aim: Vec3 | null, gi: number) {
     const bf = this.bf, u = this.unit, team = u.team;
@@ -404,15 +456,15 @@ export class EnergyGuns {
     const pts: Vec3[] = [set3(v3(), muzzle)];
     const hit = new Set<unknown>();
     // The first target: the lock, else the enemy nearest the aim point within reach.
-    let cur: { x: number; y: number; z: number } | null = null;
-    if (u.lock && Math.hypot(u.lock.x - muzzle.x, u.lock.z - muzzle.z) <= st.range + (u.lock.r ?? 0)) { cur = { x: u.lock.x, y: u.lock.y, z: u.lock.z }; hit.add(u.lock.key); }
+    let cur: { x: number; y: number; z: number; r: number; id: unknown } | null = null;
+    if (u.lock && Math.hypot(u.lock.x - muzzle.x, u.lock.z - muzzle.z) <= st.range + (u.lock.r ?? 0)) { cur = { x: u.lock.x, y: u.lock.y, z: u.lock.z, r: u.lock.r ?? 1, id: u.lock.key }; hit.add(u.lock.key); }
     else {
       const ax = aim ? aim.x : muzzle.x + d.x * st.range * 0.6, az = aim ? aim.z : muzzle.z + d.z * st.range * 0.6;
       let bd = Infinity, first: unknown = null;
       for (const e of this.enemiesNear(ax, az, st.seek, this.found)) {
         if (Math.hypot(e.x - muzzle.x, e.z - muzzle.z) > st.range) continue;
         const q = Math.hypot(e.x - ax, e.z - az);
-        if (q < bd) { bd = q; cur = { x: e.x, y: e.y, z: e.z }; first = e.id; }
+        if (q < bd) { bd = q; cur = { x: e.x, y: e.y, z: e.z, r: e.r, id: e.id }; first = e.id; }
       }
       if (cur) hit.add(first);
     }
@@ -430,6 +482,8 @@ export class EnergyGuns {
       splashBlast(bf.targets, team, g, 1.2, st.damage * 0.5, dir, null, st.ap);
       bf.heat?.spot(gx, gz, 0.4, this.v.beamHeat * 0.5);
       bf.gunFx.sparksAt(g, this.n.set(0, 1, 0), 5, 5);
+      this.flare("arc", gx, g.y + 0.3, gz, 1, this.v.arcFlashTime);
+      bf.heat?.scorchSpot(gx, gz, 0.9, 0.5);
     } else {
       let damage = st.damage;
       for (let hop = 0; cur && hop <= st.hops; hop++) {
@@ -439,11 +493,15 @@ export class EnergyGuns {
         pts.push(set3(v3(), p));
         splashBlast(bf.targets, team, p, 1.2, damage, dir, null, st.ap);
         dealt += damage;
-        bf.gunFx.sparksAt(p, this.n.set(0, 1, 0), 4, 6);
+        bf.gunFx.sparksAt(p, this.n.set(0, 1, 0), 4 + (hop === 0 ? 4 : 0), 6);
+        // Impact you can see: a flash on the body and charge left crackling over it.
+        const r = Math.min(4, Math.max(0.5, cur.r || 1));
+        this.flare("arc", p.x, p.y, p.z, r, this.v.arcFlashTime);
+        this.shock(cur.id, p.x, p.y, p.z, r);
         damage *= st.keep;
         if (hop === st.hops || damage < 0.5) break;
         // The next: the nearest enemy not yet struck within jump reach.
-        let next: { x: number; y: number; z: number; id: unknown } | null = null, bd = Infinity;
+        let next: { x: number; y: number; z: number; r: number; id: unknown } | null = null, bd = Infinity;
         for (const e of this.enemiesNear(p.x, p.z, st.hopRange, this.found)) {
           if (hit.has(e.id)) continue;
           const q = (e.x - p.x) ** 2 + (e.z - p.z) ** 2;
@@ -451,7 +509,7 @@ export class EnergyGuns {
         }
         if (!next) break;
         hit.add(next.id);
-        cur = { x: next.x, y: next.y, z: next.z };
+        cur = { x: next.x, y: next.y, z: next.z, r: next.r, id: next.id };
       }
     }
     this.last.arc = dealt;
@@ -530,6 +588,7 @@ export class EnergyGuns {
 
   private sheetBuf: SheetHit<import("../../game/battlefield").Hittable>[] = [];
   private digT = 0;
+  private scorchT = 0;
   private shakeT = 0;
   private ro = new THREE.Vector3();
   private rd = new THREE.Vector3();
@@ -573,6 +632,10 @@ export class EnergyGuns {
       bf.sfx.playSound("sunderRelease", muzzle, 1, 0.75);
       bf.gunFx.sparksAt(muzzle, d, 18, 12);
       this.onShake?.(v.sunderShake * 3);
+      // Where it first lands: a white burst (the lance's burst of light, in gold).
+      if (v.sunderFlash > 0) this.novas.push({ at: set3(v3(), end), ground: bf.field.height(end.x, end.z), r: v.sunderFlash, power: 1, age: 0, life: 0.55, seed: Math.random() * 1000, cls: "sunder" });
+      if (tr.steel || tr.ground) bf.gunFx.sparksAt(end, this.n.copy(d).negate(), 24, 14);
+      s.scorchAt = null;
     }
     s.beam.on = true; s.beam.age += dt;
     set3(s.beam.from, muzzle); set3(s.beam.to, end);
@@ -596,10 +659,13 @@ export class EnergyGuns {
           else t.pick?.(h.key);
           for (let k = 0; k < ticks; k++) t.damage(st.damage, at, d, st.ap);
           dealt += st.damage * ticks; hits++;
-          if (Math.random() < 0.5) {
+          if (Math.random() < 0.7) {
             if (t.surface === "flesh") bf.gunFx.onFleshHit?.(at, d);
-            else bf.gunFx.sparksAt(at, this.n.copy(d).negate(), 3, 7);
+            else bf.gunFx.sparksAt(at, this.n.copy(d).negate(), 5, 9);
           }
+          // Lit up by it (the glare on the body), and set alight: metal heats and glows after the beam moves on.
+          this.flare("sunder", h.x, h.y, h.z, 1.1, 0.22);
+          if (v.sunderBurn > 0 && v.sunderBurnDps > 0) bf.burns.ignite(t, h.key, v.sunderBurn, v.sunderBurnDps, h.x, h.y, h.z, d.x, d.z);
         }
       }
       this.last.sunder = dealt;
@@ -612,9 +678,18 @@ export class EnergyGuns {
       bf.heat?.line(end.x - d.x * 2, end.z - d.z * 2, end.x, end.z, 0.6, v.sunderHeat * 0.5, dt);
       this.digT -= dt;
       if (this.digT <= 0 && v.sunderDig > 0) { this.digT = 0.12; bf.marks.crater(end.x, end.z, v.sunderDig); }
+      // A black scorch along where it dragged (from the last scorch point to here) and round where it stands.
+      this.scorchT -= dt;
+      if (this.scorchT <= 0 && v.sunderScorch > 0) {
+        this.scorchT = 0.1;
+        const from = s.scorchAt, w = 0.9 * Math.max(0.5, v.sunderCore * 2.5);
+        if (from && Math.hypot(end.x - from.x, end.z - from.z) < 8) bf.heat?.scorch(from.x, from.z, end.x, end.z, w, v.sunderScorch);
+        bf.heat?.scorchSpot(end.x, end.z, w * 1.4, v.sunderScorch);
+        s.scorchAt = set3(s.scorchAt ?? v3(), end);
+      }
       if (Math.random() < dt * 14) bf.dust.smoke(end.x, end.y + 0.1, end.z, (Math.random() - 0.5) * 0.8, 1 + Math.random(), (Math.random() - 0.5) * 0.8, 0.4, 1.1, 0.4, 0.8);
       if (Math.random() < dt * 8 && !bf.inWater(end.x, end.z)) bf.dust.hit(end.x, end.y, end.z, d.x, d.z, 0.8);
-    } else if (tr.steel && Math.random() < dt * 20) bf.gunFx.sparksAt(end, this.n.copy(d).negate(), 4, 9);
+    } else { s.scorchAt = null; if (tr.steel && Math.random() < dt * 30) bf.gunFx.sparksAt(end, this.n.copy(d).negate(), 6, 11); }
     this.shakeT -= dt;
     if (this.shakeT <= 0) { this.shakeT = 0.1; this.onShake?.(v.sunderShake); }
     if (!s.loop) s.loop = bf.sfx.startSoundLoop("sunderHum", Math.random());
