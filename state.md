@@ -325,6 +325,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-15 · `npm run play`: one command to pull main, install, build and serve (Keith; Claude)
+`tools/play.mjs` (`--dev` for hot reload), `package.json`, top of `README.md`. Checked: `npm test` 114/114, `npm run build`.
+
 ### 2026-11-15 · Asset rebuild, vehicles: the turret truck as a model (Keith 2026-11-13: "start building assets for all ... enemies"; Claude on `claude/project-thread-vum2tc`)
 - `tools/blender/parts/warband.py` `heavy(..., tt=True)` into `public/models/vehicles/turretTruck.glb` (5,280 tris): the six-wheeler's chassis, heavier, a five-layer timber crib chained to the bed with the turret's ring on top, four outriggers kicked out to the sand, shell crates behind the cab, a spare on the door, short stacks and the lamps on the cab's brow so the barrel swings clear. The salvaged turret itself is still the code one. No code change; `assets-check`'s vehicle envelope is wider for the outriggers.
 - Checked: `npm test`, the Blender sheet (no game shot: the same loading route as the gun truck).
