@@ -11,6 +11,7 @@
 // src/ui/iconList.ts, and every listed base has its file.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { BASE_BY_ID } from "../src/items/bases";
+import { CAR_KINDS } from "../src/vehicles/car";
 import { ICON_IDS } from "../src/ui/iconList";
 
 let fails = 0;
@@ -28,6 +29,8 @@ const RULES: Record<string, { tris: number; sockets: string[]; half: [number, nu
   weapon: { tris: 1500, sockets: [], half: [0.7, 0.7, 6.0] },
   // Shoulder gear, the summoner shoulders and the strikes, standing on the shoulder mount (the quake hammer 1.8 m tall).
   shoulder: { tris: 1500, sockets: [], half: [0.7, 1.9, 0.9] },
+  // A vehicle's body, painted panels, lamps and one wheel (tools/blender/parts/warband.py), built to its kind's default tuning.
+  vehicle: { tris: 12000, sockets: ["Turret"], half: [1.8, 2.6, 3.4] },
 };
 
 interface Gltf {
@@ -61,13 +64,15 @@ function meanColour(g: Gltf, bin: Buffer, acc: number): number {
 }
 
 const found: [string, string][] = [];
-for (const dir of ["public/models/parts", "public/models/sensors"]) {
+for (const dir of ["public/models/parts", "public/models/sensors", "public/models/vehicles"]) {
   if (existsSync(dir)) for (const f of readdirSync(dir)) if (f.endsWith(".glb") && !/-lod\d\.glb$/.test(f)) found.push([dir, f]);
 }
 const files = found;
 for (const [partsDir, file] of found) {
-  const id = file.slice(0, -4), base = BASE_BY_ID[id], tag = `${partsDir.split("/").pop()}/${file}`;
-  if (!base) { fail(`${tag}: no item base "${id}"`); continue; }
+  const id = file.slice(0, -4), tag = `${partsDir.split("/").pop()}/${file}`;
+  // A vehicle is named by its kind (src/vehicles/car.ts), a part by its item base.
+  const base = partsDir.endsWith("/vehicles") ? (id in CAR_KINDS ? { kind: "vehicle" } : undefined) : BASE_BY_ID[id];
+  if (!base) { fail(`${tag}: no item base or vehicle kind "${id}"`); continue; }
   const rule = RULES[base.kind];
   if (!rule) { fail(`${tag}: kind ${base.kind} has no part rules yet (add them here with its budget)`); continue; }
   const glb = readGlb(`${partsDir}/${file}`);

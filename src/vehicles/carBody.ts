@@ -14,6 +14,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { carAxles, carValues, type CarKind, type CarSim, type CarValues } from "./car";
 import { LAMP_HEAD, LAMP_TAIL, type LampSpot } from "../world/lamps";
 import { drawBetweenTicks } from "../look/treeInterp";
+import { carModel, MODEL_FIT_KEYS, type CarModel } from "./carModels";
 
 const PAL = {
   paint: 0xa8552c, // rust orange, the default body colour
@@ -212,6 +213,31 @@ export class CarBody {
     else this.buildTruck(k, color);
     this.chassis = mesh(k.build(), this.root);
     this.buildWheels(k);
+    // The kind's model in the boxes' place once it loads (src/vehicles/carModels.ts), while the sliders it was built to
+    // stand at the kind's defaults: the boxes follow the sliders, a model can't.
+    const std = carValues(kind);
+    if (MODEL_FIT_KEYS.every((key) => v[key] === std[key])) void carModel(kind).then((m) => { if (m) this.useModel(m, color); });
+  }
+
+  /** The lamps' lit faces of a model (unlit; dark when wrecked). */
+  private lit: THREE.Mesh | null = null;
+
+  private useModel(m: CarModel, color: number) {
+    const parts = [m.body];
+    if (m.paint) {
+      // The painted panels are authored near white: this vehicle's colour goes on here.
+      const g = m.paint.clone(), col = g.getAttribute("color"), c = new THREE.Color(color);
+      for (let i = 0; i < col.count; i++) col.setXYZ(i, col.getX(i) * c.r, col.getY(i) * c.g, col.getZ(i) * c.b);
+      parts.push(g);
+    }
+    this.chassis.geometry.dispose();
+    this.chassis.geometry = parts.length > 1 ? mergeGeometries(parts, false)! : m.body;
+    if (m.glow && !this.lit) {
+      this.lit = new THREE.Mesh(m.glow, this.wrecked ? BURNT : GLOW_BASE);
+      this.lit.castShadow = this.chassis.castShadow;
+      this.root.add(this.lit);
+    }
+    if (m.wheel && !this.tracked) for (const w of this.wheels) (w.spin as THREE.Mesh).geometry = m.wheel;
   }
 
   /** How many guns it carries (the war rig two: cab roof, then the back). */
@@ -635,7 +661,7 @@ export class CarBody {
   }
 
   meshes(): THREE.Mesh[] {
-    return [this.chassis, ...this.gunMeshes, ...this.wheels.map((w) => w.spin), ...(this.glow ? [this.glow] : [])];
+    return [this.chassis, ...this.gunMeshes, ...this.wheels.map((w) => w.spin), ...(this.glow ? [this.glow] : []), ...(this.lit ? [this.lit] : [])];
   }
 
   /** For a death's debris (src/combat/raiderDeath.ts): the wheels' meshes (none on tracks), the turrets' yaw parts and the wheel radius. */
@@ -647,7 +673,7 @@ export class CarBody {
   setWrecked(on: boolean) {
     this.wrecked = on;
     this.root.userData.lampsOff = on;
-    for (const m of this.meshes()) m.material = on ? BURNT : m === this.glow ? this.glowMat! : LIVE;
+    for (const m of this.meshes()) m.material = on ? BURNT : m === this.glow ? this.glowMat! : m === this.lit ? GLOW_BASE : LIVE;
     this.wheels.forEach((w, i) => {
       if (on && !this.tracked) w.pivot.rotation.set(0, (i === 1 ? 0.3 : 0), w.side * (i === 2 ? 0.45 : i > 3 && i === this.wheels.length - 1 ? 0.3 : 0.18));
       else w.pivot.rotation.set(0, 0, 0);

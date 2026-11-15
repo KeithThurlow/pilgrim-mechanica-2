@@ -34,7 +34,7 @@ export function partGlb(id: string): Promise<THREE.Object3D | null> {
  * The geometry as plain float attributes (position, normal, rgb colour) with its index: Blender's exporter packs
  * normalised 16-bit colours and may interleave, which the unit look's outline shell and the part merges can't copy.
  */
-function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
+export function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
   for (const [name, size] of [["position", 3], ["normal", 3], ["color", 3]] as const) {
     const a = g.getAttribute(name);
