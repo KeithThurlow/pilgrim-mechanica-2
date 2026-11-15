@@ -326,6 +326,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-15 · Sunder beam and arc caster impact: light, flashes, scorch, crackle (Keith; Claude)
+Sunder: soft additive light pools on the sand where it lands, along its lane and under each body it burns, a glare on those bodies, a gold burst where it first lands, more sparks, a dragged scorch, and what it touches burns on (1.5 s, 15 dps; metal heats and glows). Arc: wider bolt glow lighting the sand, a flash on each body struck, charge crackling over each one for 1.2 s, following it. No real lights (mobile). Sliders in Weapons › Sunder beam and Arc caster. `src/weapons/energy/energyGuns.ts` (flares, shocks), `energyDraw.ts`, `energyTuning.ts`. Checked: `npm test` 114/114 (energy-check: shocks one per body, follow, expire; flares capped; sunder burst). No screenshots (software GL too slow here).
+
 ### 2026-11-15 · Stagger and knockback for every unit, the player included (Keith: "getting hit by a sword should really stagger enemies ... including us ... a hidden stagger resistance"; Claude on `claude/project-thread-skvnep`)
 - New `src/game/poise.ts` (the rule and its sliders, Stagger topic in every combat lab and the convoy lab), hooked into the robots, bandits and droids, crushers, striders and `MechUnit`; swords add 2.5 × their damage through `Hittable.poise`. Values in the Systems entry; all Claude's defaults, open for Keith (`docs/decisions.md`). Checked: new `tools/stagger-check.ts` (sword staggers every kind and a mech, rounds stream-stagger a cutter, a stagger breaks an excavator's charging beam and a crusher's suck, a staggered bandit holds fire, grace), `npm test` 115/115 (allies-check caught scrappers knocked down by stagger outliving the scrap swarm: scrappers' poise now 0).
 

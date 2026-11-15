@@ -83,6 +83,12 @@ export const ENERGY_DEFAULTS = {
   arcSpinDown: 0.6,
   arcWhineLevel: 0.8,
   arcGlow: 1,
+  /** Impact you can see (Keith 2026-11-15: "more glow ... an electric effect on things that have been hit"): the bolts'
+   *  glow (× width), a flash on each body struck (size × and seconds), and charge crackling over it for arcCrackle s. */
+  arcBoltGlow: 1.6,
+  arcFlash: 1,
+  arcFlashTime: 0.18,
+  arcCrackle: 1.2,
   // Sunder beam (Keith 2026-11-02: "like the walkers... charge up a beam and then you blast"): one press commits it: it
   // charges, then a heavy beam burns for its channel time while you steer it (slowly), cutting through everything under
   // it, then it ends and cools down. The whole cost is paid when it starts.
@@ -101,6 +107,15 @@ export const ENERGY_DEFAULTS = {
   sunderHeat: 2500,
   sunderDig: 0.6,
   sunderShake: 0.06,
+  /** Impact (Keith 2026-11-15: "doesn't feel like it's illuminating or impacting enemies"): the light it throws on the
+   *  sand and on what it burns (× brightness; drawn as additive light pools, no real lights, so it costs no more on a
+   *  phone), the white burst where it first lands (radius m), the scorch it drags over the sand (darkness), and the
+   *  burn it leaves on what it touched (s and damage/s; metal heats and glows). */
+  sunderGlow: 1,
+  sunderFlash: 3,
+  sunderScorch: 0.9,
+  sunderBurn: 1.5,
+  sunderBurnDps: 15,
 };
 export type EnergyValues = typeof ENERGY_DEFAULTS;
 
@@ -176,6 +191,10 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "arcSpinDown", label: "Spool drains in (s)", min: 0.05, max: 3, step: 0.05, group: AR, tip: "Let go, a full charge drains over this long; a re-press before then fires sooner" },
   { key: "arcWhineLevel", label: "Charge whine level", min: 0, max: 1.5, step: 0.01, group: AR },
   { key: "arcGlow", label: "Charge glow size", min: 0, max: 3, step: 0.05, group: AR, tip: "The ball and crackle at the muzzle while it charges and fires" },
+  { key: "arcBoltGlow", label: "Bolt glow (× width)", min: 0, max: 4, step: 0.05, group: AR, tip: "The blue glow round each lightning bolt, and the light it throws on the sand" },
+  { key: "arcFlash", label: "Hit flash size (×)", min: 0, max: 3, step: 0.05, group: AR, tip: "The blue-white flash on each body a bolt strikes" },
+  { key: "arcFlashTime", label: "Hit flash lasts (s)", min: 0, max: 0.6, step: 0.01, group: AR },
+  { key: "arcCrackle", label: "Crackle lingers (s)", min: 0, max: 4, step: 0.05, group: AR, tip: "Charge left crackling over each body struck, following it (0: none)" },
   { key: "sunderDps", label: "Damage/s", min: 50, max: 2500, step: 10, group: SU, tip: "To everything under the beam at once" },
   { key: "sunderAp", label: "Armour pierce", min: 0, max: 1, step: 0.01, group: SU },
   { key: "sunderTicks", label: "Burn ticks/s", min: 2, max: 30, step: 1, group: SU },
@@ -191,4 +210,9 @@ export const ENERGY_PARAMS: Param[] = [
   { key: "sunderHeat", label: "Sand heat", min: 0, max: 4000, step: 50, group: SU },
   { key: "sunderDig", label: "Digs the sand (crater size)", min: 0, max: 2, step: 0.05, group: SU, tip: "0: no dents where it burns" },
   { key: "sunderShake", label: "Camera shake", min: 0, max: 0.3, step: 0.005, group: SU },
+  { key: "sunderGlow", label: "Impact light (×)", min: 0, max: 3, step: 0.05, group: SU, tip: "The light it throws on the sand under it, where it lands and on what it burns (light pools, no real lights)" },
+  { key: "sunderFlash", label: "Landing burst (m)", min: 0, max: 8, step: 0.1, group: SU, tip: "The white burst where the blast first lands (0: none)" },
+  { key: "sunderScorch", label: "Scorch", min: 0, max: 1, step: 0.05, group: SU, tip: "The black burn it drags over the sand (0: none)" },
+  { key: "sunderBurn", label: "Sets alight for (s)", min: 0, max: 6, step: 0.1, group: SU, tip: "What it touched burns on this long; metal heats and glows (0: no burn)" },
+  { key: "sunderBurnDps", label: "Burn damage/s", min: 0, max: 100, step: 1, group: SU },
 ];

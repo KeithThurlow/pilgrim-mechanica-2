@@ -293,6 +293,17 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     must(lone.guns.last.arcHits === 1 && taken(lone.range.dummies[1]) === 0, "the arc jumped further than its reach");
     const none = fire("arc", flat, 20, V.arcSpool + 2 * dt, [{ x: 0, z: 60 }]);
     must(none.guns.arcs.length === 1 && none.guns.last.arcHits === 1 && taken(none.range.dummies[0]) === 0, "an arc with nothing in range didn't ground at the aim");
+    // Impact (Keith 2026-11-15): every body struck crackles (one shock each, however many zaps), following it, gone
+    // after arcCrackle s; a grounded zap leaves no shock. Flashes on what it strikes, capped.
+    const struck = Math.min(line.length, V.arcHops + 1);
+    must(guns.shocks.length === struck && new Set(guns.shocks.map((s) => s.id)).size === struck, `the arc left ${guns.shocks.length} crackling bodies (want ${struck}, one each)`);
+    must(guns.flares.some((f) => f.cls === "arc") && guns.flares.length <= 64, `the arc's hit flashes went wrong (${guns.flares.length})`);
+    const d0 = range.dummies[0], sh0 = guns.shocks.find((s) => s.id === d0)!;
+    d0.x += 3; guns.age(dt);
+    must(near(sh0.x, d0.x, 1e-6), "an arc's crackle didn't follow the body it struck");
+    for (let t = 0; t < V.arcCrackle + 0.1; t += dt) guns.age(dt);
+    must(guns.shocks.length === 0, `arc crackle outlived arcCrackle (${guns.shocks.length} left)`);
+    must(none.guns.shocks.length === 0, "a grounded arc left a crackle");
   }
   {
     // Sunder: one press, it charges, then burns every cutout under its line (it isn't stopped by the first), none off it.
@@ -306,6 +317,9 @@ const pool = (n: number): EnergyPool & { left: number } => ({ left: n, get energ
     must(hit.every((h) => h > 0), `the sunder beam didn't cut through every cutout on its line (${hit.map((h) => h.toFixed(0)).join(", ")})`);
     must(taken(range.dummies[3]) === 0, "the sunder beam burnt a cutout 7 m off its line");
     must(guns.sides[1].beam.on, "the sunder blast stopped when the trigger let go (it should run its channel time)");
+    must(guns.flares.some((f) => f.cls === "sunder") && guns.flares.length <= 64, `the sunder beam didn't light up what it burns (${guns.flares.length} flares)`);
+    const early = fire("sunder", flat, 40, V.sunderCharge + 0.2, line);
+    must(early.guns.novas.some((n) => n.cls === "sunder") || V.sunderFlash <= 0, "the sunder beam's landing burst didn't show");
     must(near(unit.reactor.energy, REACTOR_DEFAULTS.reactorCap - V.sunderEnergy, 0.3) && near(unit.dash.energy, DASH_DEFAULTS.dashCharges), "the sunder beam didn't draw its cost from the reactor alone");
     // A dune in the way: the blast ends in it.
     const dune = (_x: number, z: number) => 6 * Math.exp(-(((z - 16) / 3) ** 2));
