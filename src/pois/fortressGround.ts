@@ -10,7 +10,7 @@
 // Stack it after the POI pads (addModifier), so the berms sit on the levelled floor.
 import type { GroundModifier, ModifierSample } from "../world/terrain";
 import type { PoiField, PoiPlacement } from "../world/pois";
-import { blocksNear, fortLayout, ringR, ringSpan, type FortValues, type Gate, type Layout, type Ring } from "./fortress";
+import { blocksNear, fortLayout, fortReach, ringR, ringSpan, type FortValues, type Gate, type Layout, type Ring } from "./fortress";
 import { hubLayout, type HubValues } from "./hub";
 
 const smooth = (a: number, b: number, x: number) => { const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return t * t * (3 - 2 * t); };
@@ -252,12 +252,27 @@ export class SiegeWalls implements GroundModifier {
   constructor(readonly pois: PoiField, public v: SiegeValues) {}
 
   /** Values or placement changed: lay out again (gates down are kept by id). */
-  reset() { this.layouts.clear(); }
+  reset() { this.layouts.clear(); this.reaches.clear(); }
 
   layout(p: PoiPlacement): Layout {
     let L = this.layouts.get(p.id);
     if (!L) { L = siegeLayout(p, this.v); this.layouts.set(p.id, L); }
     return L;
+  }
+
+  private reaches = new Map<string, number>();
+  /**
+   * Could its walls reach (x, z)? From the rings alone until it is laid out, so a ground read a long way off (a wreck
+   * dropped 200 m from a fortress) does not lay the whole thing out in the middle of a fight (perf 2026-11-15).
+   */
+  private reaching(p: PoiPlacement, x: number, z: number) {
+    let R = this.layouts.get(p.id)?.reach ?? this.reaches.get(p.id);
+    if (R === undefined) {
+      if (p.kind === "hub") return true; // a hub's layout is cheap
+      R = fortReach(p, this.v);
+      this.reaches.set(p.id, R);
+    }
+    return Math.abs(x - p.x) <= R && Math.abs(z - p.z) <= R;
   }
 
   /** The fortresses and hubs whose walls could reach (x, z). */
@@ -272,13 +287,13 @@ export class SiegeWalls implements GroundModifier {
   private list: PoiPlacement[] = [];
   at(x: number, z: number, out: ModifierSample): boolean {
     let h = 0;
-    for (const p of this.near(x, z, this.list)) h = Math.max(h, wallHeight(this.layout(p), x, z, this.down));
+    for (const p of this.near(x, z, this.list)) if (this.reaching(p, x, z)) h = Math.max(h, wallHeight(this.layout(p), x, z, this.down));
     if (h <= 0) return false;
     out.w = 0; out.berm = h; out.lift = 0; out.rough = 0;
     return true;
   }
 
-  metalAt(x: number, z: number) { return this.near(x, z, this.list).some((p) => wallMetal(this.layout(p), x, z, this.down)); }
+  metalAt(x: number, z: number) { return this.near(x, z, this.list).some((p) => this.reaching(p, x, z) && wallMetal(this.layout(p), x, z, this.down)); }
 
   /** Walls only add height (w is always 0): never a floor. */
   noFloor() { return true; }

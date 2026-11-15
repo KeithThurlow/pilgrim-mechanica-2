@@ -227,6 +227,24 @@ function segDist(x: number, z: number, ax: number, az: number, bx: number, bz: n
   return Math.hypot(x - ax - dx * t, z - az - dz * t);
 }
 
+/** A street's box, kept while its points stay as many (perf 2026-11-15). */
+const streetBox = new WeakMap<Street, { n: number; x0: number; z0: number; x1: number; z1: number }>();
+/**
+ * Is (x, z) further than lim from the street? The same answer as streetDist(s, x, z) > lim, without measuring every
+ * stretch when the point is outside the street's box grown by lim (laying a fortress out asks this some 200,000 times).
+ */
+export function streetFar(s: Street, x: number, z: number, lim: number) {
+  let b = streetBox.get(s);
+  if (!b || b.n !== s.pts.length) {
+    b = { n: s.pts.length, x0: Infinity, z0: Infinity, x1: -Infinity, z1: -Infinity };
+    for (const q of s.pts) { b.x0 = Math.min(b.x0, q.x); b.z0 = Math.min(b.z0, q.z); b.x1 = Math.max(b.x1, q.x); b.z1 = Math.max(b.z1, q.z); }
+    streetBox.set(s, b);
+  }
+  const g = lim + 0.01;
+  if (b.n > 1 && (x < b.x0 - g || x > b.x1 + g || z < b.z0 - g || z > b.z1 + g)) return true;
+  return streetDist(s, x, z) > lim;
+}
+
 /** Distance from (x, z) to a street's centre line. */
 export function streetDist(s: Street, x: number, z: number) {
   let best = Infinity;
@@ -277,17 +295,9 @@ export function blocksNear(L: Layout, x: number, z: number): readonly number[] {
 }
 const NONE: number[] = [];
 
-/**
- * The layout (Keith 2026-11-05: "a slightly more organic looking village city like layout", the old project's organic
- * towns: streets first, buildings along them, a broken outline round it all). Loosely concentric still: an outer wall
- * on a ragged outline, a middle wall now and then, the keep pushed off centre. A main street runs in from every outer
- * gate, wandering round its yard and across the middle wall (a gate where it crosses, barred or an open gap) to the
- * nearest keep gate; lanes fork off the streets; container shacks stand along every street and lane with their doors
- * to it, a back row behind, and a few loose stacks.
- */
-export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
+/** The rings alone (the layout's cheap first part), with the seeded dice as they stand after them. */
+function fortRings(p: PoiPlacement, v: FortValues) {
   const r = rng(p.seed ^ 0x5f0f7);
-  const range = (a: number, b: number) => a + (b - a) * r();
   const jit = (x: number) => x * (1 + (r() * 2 - 1) * v.fortSizeJit);
   const three = v.fortMiddle > v.fortKeep + 8 && v.fortMiddle < v.fortOuter - 8 && r() < v.fortThree;
   const rs = [jit(v.fortOuter)];
@@ -328,6 +338,30 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
     }
     rings.push(ring);
   }
+  return { r, rings, three };
+}
+
+/**
+ * How far a fortress's walls reach from its centre, without laying it out (the rings only; perf 2026-11-15: a ground
+ * read 200 m from one used to lay the whole fortress out, 25 to 50 ms in one tick). The same number as its Layout's reach.
+ */
+export function fortReach(p: PoiPlacement, v: FortValues): number {
+  let reach = 0;
+  for (const ring of fortRings(p, v).rings) reach = Math.max(reach, ringExtent(ring)[1] + ringSpan(ring));
+  return reach + 1;
+}
+
+/**
+ * The layout (Keith 2026-11-05: "a slightly more organic looking village city like layout", the old project's organic
+ * towns: streets first, buildings along them, a broken outline round it all). Loosely concentric still: an outer wall
+ * on a ragged outline, a middle wall now and then, the keep pushed off centre. A main street runs in from every outer
+ * gate, wandering round its yard and across the middle wall (a gate where it crosses, barred or an open gap) to the
+ * nearest keep gate; lanes fork off the streets; container shacks stand along every street and lane with their doors
+ * to it, a back row behind, and a few loose stacks.
+ */
+export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
+  const { r, rings, three } = fortRings(p, v);
+  const range = (a: number, b: number) => a + (b - a) * r();
   const last = rings.length - 1, outer = rings[0], keep = rings[last];
   // Gates: the outer wall's 1 to the most, spread round; the keep's turned away from them.
   const gate = (k: number, n: number, a: number, barred: boolean): Gate => {
@@ -389,7 +423,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
   // The middle wall's gates: where the streets cross; one barred at least, the rest barred by chance or open gaps.
   if (three) crossAt.forEach((a, n) => rings[1].gates.push(gate(1, n, a, n === 0 || r() < v.fortMidBarred)));
   const gates = rings.flatMap((g) => g.gates);
-  const clearOfStreetsP = (x: number, z: number, w: number, m: number) => streets.every((s) => streetDist(s, x, z) > s.w / 2 + w / 2 + m);
+  const clearOfStreetsP = (x: number, z: number, w: number, m: number) => streets.every((s) => streetFar(s, x, z, s.w / 2 + w / 2 + m));
   const nearGateM = (x: number, z: number, m: number) => gates.some((g) => Math.hypot(g.x - x, g.z - z) < g.w / 2 + m);
 
   // Back streets: forking off a main street in a yard and running on round it (either way), wandering across it,
@@ -426,7 +460,7 @@ export function fortLayout(p: PoiPlacement, v: FortValues): Layout {
   // Lanes: forking off the streets' yard stretches (now and then off another lane) at a slant, bending once, kept a
   // shack's depth off every other street so both sides can be built.
   const lw = v.fortLaneW;
-  const clearOfStreets = (x: number, z: number, w: number, skip: Street | null, m: number) => streets.every((s) => s === skip || streetDist(s, x, z) > s.w / 2 + w / 2 + m);
+  const clearOfStreets = (x: number, z: number, w: number, skip: Street | null, m: number) => streets.every((s) => s === skip || streetFar(s, x, z, s.w / 2 + w / 2 + m));
   const lanes: Street[] = [];
   for (let tries = 0; tries < v.fortLanes * 14 && lanes.length < v.fortLanes; tries++) {
     const parent = lanes.length && r() < 0.35 ? lanes[Math.floor(r() * lanes.length)] : streets[Math.floor(r() * streets.length)];

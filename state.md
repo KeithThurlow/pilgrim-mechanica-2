@@ -325,6 +325,11 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-15 · Mobile frame rate, step 4: the fight's worst ticks traced; a fortress is no longer laid out by a far ground read (Keith's ask of 2026-11-13 to reach 30 fps on phones; Claude on `claude/project-thread-w0fxn6`)
+- Traced with `tools/perf-stages.mjs` (now lists the six dearest frames with the stages that made them dear) in `labs/convoy/?siege=80&manual&lite=1&norender&dt=0.0333`: the one 35 to 50 ms "raiders and fights" tick early in the siege was a clash's wreck site being drawn 200 m from a bandit fortress, whose first ground read laid the whole fortress out (`fortLayout`, 25 ms and more). Other peaks left: a crater's fit 5 to 15 ms each (base ground reads through the modifiers, new tiles), a mech model built mid-fight (67 ms once), GC.
+- `src/pois/fortress.ts`: `fortRings` (the layout's cheap first part, split out), `fortReach(p, v)` (how far the walls reach, from the rings only; the same number as the layout's `reach`), `streetFar` (a box reject before measuring a street's stretches: layouts 25 to 17 ms, the same layouts). `src/pois/fortressGround.ts`: `SiegeWalls.at` and `metalAt` skip a fortress the point is beyond the reach of, so it is laid out only when something reads the ground inside its walls' box.
+- Checked: twelve layouts hash the same before and after; `fortress-check` (new rule: the rings' reach equals the layout's on 60 fortresses) and `fortmechs-check` pass; in the siege the 35 to 50 ms tick is gone, ground mirror ok, convoy ok.
+
 ### 2026-11-14 · Rivals fire shoulder strikes fitted to them (Keith: carry on; Claude on `claude/project-thread-tm0jh3`)
 - A rival fitted with a strike uses it (`src/combat/rivalKit.ts` kind `strike`, `duelThreats.ts` readiness): aimed strikes painted at your led position and released, quake and cryo bomb when you're within 70% of their reach. Rolls unchanged (rivals don't roll strikes: open question). `window.__rivalArsenal()` in the duel lab.
 - Checked: duel lab headless, `?rivalfit=shoulderL:sh-quake,shoulderR:sh-orbital`: the rival fired the orbital lance twice in 48 s, no errors. npm test.

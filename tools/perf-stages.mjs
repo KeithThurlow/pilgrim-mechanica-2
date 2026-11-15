@@ -3,7 +3,8 @@
 // Usage: node tools/perf-stages.mjs "<path?flags>" [wait s] [measure s]
 //   e.g. node tools/perf-stages.mjs "labs/convoy/?siege=80&manual&lite=1&norender&dt=0.0333" 20 30
 // Env as tools/perf-profile.mjs: THROTTLE, FIRE, KEYS, VIEW, BASE, CHROME, HEADED.
-// Prints the mean and the worst of the frame's sim and submit, then every stage's mean ms a frame (window.__costs).
+// Prints the mean and the worst of the frame's sim and submit, every stage's mean ms a frame (window.__costs), and the
+// six dearest frames with the stages that made them dear.
 import { chromium } from "playwright";
 
 const url = process.argv[2] || "labs/convoy/?siege&manual";
@@ -25,7 +26,7 @@ for (const k of (process.env.KEYS || "").split(",").filter(Boolean)) await p.key
 await p.waitForTimeout(wait * 1000);
 // Every frame: the app's own times and the stage list as the HUD last had it.
 await p.evaluate(() => {
-  const s = (window.__perf = { n: 0, tick: 0, render: 0, worstTick: 0, worstRender: 0, ticks: [], stages: {} });
+  const s = (window.__perf = { n: 0, tick: 0, render: 0, worstTick: 0, worstRender: 0, ticks: [], stages: {}, worst: [], t0: performance.now() });
   const f = () => {
     const l = window.__app.last;
     s.n++; s.tick += l.tick; s.render += l.render; s.ticks.push(l.tick);
@@ -33,6 +34,11 @@ await p.evaluate(() => {
     if (l.render > s.worstRender) s.worstRender = l.render;
     const c = window.__costs?.();
     if (c) for (const k in c) s.stages[k] = (s.stages[k] || 0) + c[k];
+    // The dearest frames, each with its own stages (what a spike is made of).
+    if (c && (s.worst.length < 6 || l.tick > s.worst[s.worst.length - 1].tick)) {
+      s.worst.push({ tick: l.tick, at: (performance.now() - s.t0) / 1000, c: { ...c } });
+      s.worst.sort((a, b) => b.tick - a.tick); s.worst.length = Math.min(6, s.worst.length);
+    }
     requestAnimationFrame(f);
   };
   requestAnimationFrame(f);
@@ -42,5 +48,7 @@ const s = await p.evaluate(() => window.__perf);
 const sorted = s.ticks.slice().sort((a, b) => a - b), pc = (q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
 console.log(`${s.n} frames in ${dur} s · sim ${(s.tick / s.n).toFixed(2)} ms mean, ${pc(0.5).toFixed(1)} median, ${pc(0.95).toFixed(1)} at 95%, ${pc(0.99).toFixed(1)} at 99%, ${s.worstTick.toFixed(1)} worst · submit ${(s.render / s.n).toFixed(2)} mean, ${s.worstRender.toFixed(1)} worst`);
 console.log(Object.entries(s.stages).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / s.n).toFixed(2)}`).join(" · "));
+console.log("the dearest frames (ms over that stage's mean):");
+for (const w of s.worst) console.log(`  ${w.tick.toFixed(1)} ms at ${w.at.toFixed(1)} s: ` + Object.entries(w.c).map(([k, v]) => [k, v - (s.stages[k] || 0) / s.n]).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k} +${v.toFixed(1)}`).join(" · "));
 console.log((await p.evaluate(() => window.__hud())).split("\n").filter((l) => /^(clock|sim|deaths):/.test(l)).join("\n").slice(0, 900));
 await b.close();
