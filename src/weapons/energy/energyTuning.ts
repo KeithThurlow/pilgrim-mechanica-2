@@ -79,7 +79,7 @@ export const ENERGY_DEFAULTS = {
   /** The spool (Keith 2026-11-14: "a winding up noise ... like a capacitor charging. And then they fire"): held, the
    *  capacitors charge over arcSpool s (a rising whine, a crackling glow at the muzzle) before the first zap; let go,
    *  they drain over arcSpinDown s, so a quick re-press fires sooner. */
-  arcSpool: 0.5,
+  arcSpool: 1,
   arcSpinDown: 0.6,
   arcWhineLevel: 0.8,
   arcGlow: 1,
