@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "play": "node tools/play.mjs",
     "check": "tsc --noEmit",
     "test": "node tools/run-checks.mjs",
     "shots": "node tools/shots.mjs",

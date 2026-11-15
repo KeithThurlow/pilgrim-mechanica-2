@@ -1,5 +1,13 @@
 # Pilgrim Mechanica 2
 
+**Update and play (no Claude needed).** From the repo folder, in PowerShell or bash: pulls `main`, installs, builds and serves it with Vite, opening the lab hub.
+
+```
+cd C:\Users\thurl\Development\pilgrim-mechanica-2; npm run play
+```
+
+(bash: `cd ~/Development/pilgrim-mechanica-2 && npm run play`.) Add `-- --dev` for the hot-reload dev server instead of a build. If `main` has local edits it stops rather than overwrite them.
+
 A mech salvage game in the browser: a convoy village rolling across endless dunes, salvage runs against its range,
 swarms closing in. Three.js (WebGPU), TypeScript, Vite.
 
