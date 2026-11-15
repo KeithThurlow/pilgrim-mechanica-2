@@ -64,6 +64,8 @@ function weaponKind(b: Base): ModelKind | null {
 async function build(b: Base): Promise<THREE.Object3D | null> {
   switch (b.kind) {
     case "weapon": case "shoulder": {
+      // Shoulder gear with a model of its own (feeds, the bank, the drone rack, the hive).
+      if (b.kind === "shoulder") { const s = await partGlb(b.id); if (s) return partFromGlb(s, toon); }
       const mk = weaponKind(b);
       if (mk) return WEAPON_MODELS[mk](toon, "right").root;
       if (b.kind === "weapon" && (b.cls === undefined || (b.cls as string) === "minigun")) {

@@ -18,16 +18,18 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
   built in another thread (PR 356, `arms.py`). Kit gotchas: `V.blk` takes the box's bottom (use the local `B` for a
   centre); a node's pieces are authored about the node's pivot.
 
+- Batch 5, first half: `gear.py` (belt feed, incendiary feed, capacitor bank, drone rack, swarm hive; kind `shoulder`,
+  origin on the shoulder mount, front -Y). Feeds and bank: `modelled()` in `src/weapons/models.ts` swaps the stand-in's
+  boxes for the GLB and makes its lit faces the lamp the arsenal drives. Rack and hive: `parts.shoulderKitL/R`
+  (`src/items/loadout.ts` `kitOn`) and `RampartBody.setShoulderKit`.
+
 ## Next, in order
-1. **Batch 6 first** (items with boxes or nothing; robots moved after it, see below):
+1. **Swords next** (the rest of batch 5; robots after, see below):
    - Swords ×3 (`sword-light` Breaker, katana-like; `sword-heavy` Buster; `sword-short`). Today one code model,
      `swordModel` in `src/weapons/models.ts`: a `swing` group (hilt, +Z from the hand), a `blade` group 1 long that the
      arsenal stretches to the reach and thickens by base (`src/weapons/arsenal.ts` near "A heavier sword is a thicker"),
      one `edge` glow material the arsenal drives. A GLB needs: hilt as Body, a `Blade` node 1 m long along forward with
      its lit edge as the node's glow piece (`b.node_glow("Blade")`); the model must be picked by base id, not kind.
-   - Belt feed, incendiary feed, capacitor bank (`beltFeedModel`, `incendiaryFeedModel`, `capacitorModel`, same file;
-     each has a lamp in `m.glow` the arsenal lights). Drone rack and swarm hive have no model at all (`sh-drones`,
-     `sh-hive`): find where shoulder items without a `shoulder:` weapon are drawn (nothing today) and hang a part there.
 2. **Robots** (was batch 5): on reading `src/combat/robotShapes.ts` they are not boxes. Each body is a designed, merged,
    instanced geometry built to Keith's own notes (2026-11-01 thorax, turret and abdomen; 2026-11-06 reactor mast) and
    tied to the leg specs (`HUB_R`, `MID_SPEC`, `BIG_SPEC`, saw and turret positions in `robotLegs.ts`), with eyes, saws

@@ -230,7 +230,7 @@ export class RampartBody {
   private packId: string | null = null;
   private packStandIn: THREE.Object3D | null = null;
   /** Where shoulder weapons stand: on each shoulder (+1 left, -1 right) and on top of the back mount. */
-  private shoulderMounts: { side: 1 | -1; g: THREE.Group }[] = [];
+  private shoulderMounts: { side: 1 | -1; g: THREE.Group; kit: THREE.Group; kitId: string | null }[] = [];
   private backTop = new THREE.Group();
   /** The sensor sockets (a head at the front, a cluster on top), the fitted sensor's model and its head motion
    *  (cosmetic, src/mech/head.ts); and the waist sockets (where the drums hang). */
@@ -377,7 +377,11 @@ export class RampartBody {
       // A shoulder weapon mount on the hull above this pod (fixed to the hull; keys 1 and 2).
       const sm = new THREE.Group();
       this.hull.add(sm);
-      this.shoulderMounts.push({ side: sd, g: sm });
+      // Shoulder gear with no weapon of its own (the drone rack, the swarm hive) loads into its own group (setShoulderKit).
+      const smKit = new THREE.Group();
+      smKit.name = "ShoulderKit";
+      sm.add(smKit);
+      this.shoulderMounts.push({ side: sd, g: sm, kit: smKit, kitId: null });
     }
 
     // Back: a half-width ammo drum per gun, a power pack raised above them (placed per hull, painted per ?mech= variant).
@@ -524,6 +528,22 @@ export class RampartBody {
     });
   }
 
+  /** Fit a shoulder's summoner gear by base id (the drone rack, the swarm hive; null: none): its GLB when it loads. */
+  setShoulderKit(side: 1 | -1, id: string | null) {
+    const m = this.shoulderMounts.find((q) => q.side === side);
+    if (!m || !this.look || id === m.kitId) return;
+    m.kitId = id;
+    m.kit.clear();
+    if (!id) return;
+    const look = this.look;
+    void partGlb(id).then((scene) => {
+      if (m.kitId !== id || !scene) return;
+      m.kit.clear();
+      m.kit.add(partFromGlb(scene, look));
+      this.repaint();
+    });
+  }
+
   /** Fit a sensor's model by base id (null: none): the code stand-in at once, its GLB in its place if one loads. */
   setSensor(id: string | null, style?: SensorStyle) {
     if (id === this.sensorId) return;
@@ -607,6 +627,8 @@ export class RampartBody {
     for (const d of this.drums) d.visible = parts.drumsL === undefined ? parts.drums : d.userData.side === 1 ? !!parts.drumsL : !!parts.drumsR;
     if (parts.waistL !== undefined) this.setWaist(1, parts.waistL);
     if (parts.waistR !== undefined) this.setWaist(-1, parts.waistR ?? null);
+    if (parts.shoulderKitL !== undefined) this.setShoulderKit(1, parts.shoulderKitL);
+    if (parts.shoulderKitR !== undefined) this.setShoulderKit(-1, parts.shoulderKitR ?? null);
     if (this.pack) this.pack.visible = parts.pack;
     if (parts.packId !== undefined && parts.pack) this.setPack(parts.packId);
     // A back weapon stands on the pack, or lower where the pack would be.

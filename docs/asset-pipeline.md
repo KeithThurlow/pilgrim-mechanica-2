@@ -40,7 +40,7 @@ well, **B** a careful code model that reads but is plain up close, **C** boxes a
 | RPG launchers (hull, shoulder), rocket | Blender (W1) | A | Keep |
 | Rail cannons, autocannon, breach cannon, mortars, rocket and missile pods, plasma, laser, orb, arc, flak, longshot, rifle, SMG, scattergun | TS kit (`src/weapons/build/`) | B | Second pass later: silhouettes are right, plates and edges are thin |
 | Swords (Breaker, Buster, short) | boxes in `models.ts` | C | Build: held in the hand, big on screen in a duel |
-| Belt feed, incendiary feed, capacitor bank | boxes | C | Build |
+| Belt feed, incendiary feed, capacitor bank | modelled 2026-11-15 (`gear.py`), with the drone rack and swarm hive | B | Check against the reference art |
 | Drone rack, swarm hive, replica bay | none of their own | none | Build |
 | Flamer, Inferno, frost thrower, cryo projector, napalm launcher | box rigs in `models.ts` | B- | Second pass |
 

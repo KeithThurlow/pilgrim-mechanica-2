@@ -6,6 +6,7 @@
 import * as THREE from "three/webgpu";
 import type { ToonLook } from "../look/toon";
 import { libraryModel, KIND_MODELS } from "./modelSwap";
+import { partFromGlb, partGlb } from "../mech/partModels";
 
 /** Shoulder feeds and power (Keith 2026-10-30): code stand-ins only, no library models yet. */
 export type GearKind = "beltfeed" | "incendiary" | "capacitor";
@@ -238,6 +239,30 @@ function lineMortarModel(look: ToonLook): WeaponModel {
 }
 
 /**
+ * A gear stand-in's boxes swapped for its model (public/models/parts/<id>.glb, tools/blender/parts/gear.py) once that
+ * loads: the model's lit faces become the lamp the arsenal drives. No file (headless, a missing model): the boxes stay.
+ */
+function modelled(m: WeaponModel, id: string, look: ToonLook): WeaponModel {
+  void partGlb(id).then((scene) => {
+    if (!scene) return;
+    for (const x of m.meshes) x.removeFromParent();
+    const part = partFromGlb(scene, look);
+    const lamp = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, transparent: true, opacity: m.glow[0]?.opacity ?? 0.9 });
+    const meshes: THREE.Mesh[] = [];
+    part.traverse((o) => {
+      const x = o as THREE.Mesh;
+      if (!x.isMesh || (x.parent as THREE.Mesh | null)?.isMesh) return;
+      if (x.userData.glow) x.material = lamp;
+      meshes.push(x);
+    });
+    m.recoil.add(part);
+    m.meshes.splice(0, m.meshes.length, ...meshes);
+    m.glow.splice(0, m.glow.length, lamp);
+  });
+  return m;
+}
+
+/**
  * Belt feed (shoulder, on the hull top above its gun): an ammo box with a belt chute running down and forward to the
  * gun below, and a lamp that lights while the overdrive runs. Mirrored by the side's sign through the mount.
  */
@@ -249,7 +274,7 @@ function beltFeedModel(look: ToonLook): WeaponModel {
   add(chute, box, STEEL, [0.16, 0.5, 0.1], [0, -0.3, 0]);
   for (let i = 0; i < 4; i++) add(chute, box, KHAKI, [0.12, 0.06, 0.1], [0, -0.1 - i * 0.12, 0.07]);
   glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.3, 0.45, 0.47]);
-  return m;
+  return modelled(m, "sh-beltfeed", look);
 }
 
 /** Incendiary feed: the belt box in dark red with a stripe, a fuel tank on top; its lamp glows while ignited rounds are loaded. */
@@ -262,7 +287,7 @@ function incendiaryFeedModel(look: ToonLook): WeaponModel {
   add(chute, box, STEEL, [0.16, 0.5, 0.1], [0, -0.3, 0]);
   for (let i = 0; i < 4; i++) add(chute, box, HOT, [0.12, 0.06, 0.1], [0, -0.1 - i * 0.12, 0.07]);
   glow(recoil, box, HOT, [0.1, 0.06, 0.03], [0.3, 0.45, 0.47]);
-  return m;
+  return modelled(m, "sh-incendiary", look);
 }
 
 /** Capacitor bank: a block of cells with a cooling fin on top and cables looping down to the hull; glows when it can discharge. */
@@ -273,7 +298,7 @@ function capacitorModel(look: ToonLook): WeaponModel {
   for (const x of [-0.24, 0, 0.24]) glow(recoil, cyl, GLOW, [0.14, 0.06, 0.14], [x, 0.97, 0]);
   add(recoil, box, STEEL, [0.9, 0.06, 0.1], [0, 0.52, 0.35]);
   for (const x of [-0.3, 0.3]) add(recoil, cyl, DARK, [0.07, 0.7, 0.07], [x, 0.0, -0.4], [0.5, 0, 0]);
-  return m;
+  return modelled(m, "sh-capacitor", look);
 }
 
 // ---- Shoulder strikes (Keith 2026-11-14): stand-ins, one look each, a lamp the arsenal lights when it's ready ----

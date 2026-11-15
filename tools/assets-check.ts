@@ -1,7 +1,7 @@
 // Asset contract check (docs/asset-pipeline.md, docs/asset-list.md): what a built model or picture must never be.
 // Fitted parts (public/models/parts/<base id>.glb, from tools/blender/parts/):
 // - the file is a GLB for a real item base of the right kind, with its sidecar, and the sidecar's numbers match it;
-// - triangles within the kind's budget (pack 2,000, arm 2,500 (the whole two-bone arm), sensor 1,000, waist 1,000);
+// - triangles within the kind's budget (pack 2,000, arm 2,500 (the whole two-bone arm), sensor 1,000, waist 1,000, shoulder gear 2,000);
 // - draw cost: one `Body` mesh, at most one `Glow`, one mesh more per moving node; one material each, named
 //   `Paint_plating` / `Paint_lighting`; every mesh carries vertex colours (COLOR_0) and normals;
 // - the kind's sockets are there (a pack: `Mount`, `Top`), and it fits the kind's envelope round its origin;
@@ -23,6 +23,8 @@ const RULES: Record<string, { tris: number; sockets: string[]; half: [number, nu
   arm: { tris: 2500, sockets: ["Upper_End", "Fore_End"], half: [1.2, 2.2, 1.6] },
   sensor: { tris: 1000, sockets: [], half: [1.2, 1.6, 1.2] },
   waist: { tris: 1000, sockets: ["Mount"], half: [0.9, 0.9, 0.9] },
+  // Shoulder gear (tools/blender/parts/gear.py): the feeds' chutes hang below the mount, ahead of it.
+  shoulder: { tris: 2000, sockets: ["Mount"], half: [0.7, 1.2, 1.0] },
 };
 
 interface Gltf {
