@@ -41,6 +41,7 @@ import { CraterLayer, CRATER_DEFAULTS, CRATER_PARAMS, HARDNESS_KEYS } from "../w
 import { SFX_DEFAULTS, SFX_PARAMS } from "../audio/sfx";
 import { Battlefield } from "./battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "./mechUnit";
+import { POISE_TOPIC } from "./poise";
 import { DeathPhysics, DEATH_DEFAULTS, DEATH_PARAMS, initPhysics } from "../physics/deaths";
 import { DeadDraw } from "../physics/deadDraw";
 import { TARGET_DEFAULTS, TARGET_PARAMS, enemiesOf, type TargetCandidate, type Lock } from "./targeting";
@@ -268,6 +269,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ...o.topics,
       { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Reactor", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
       { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD"] },
+      POISE_TOPIC,
       ABILITY_TOPIC, SUMMON_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Hover", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },

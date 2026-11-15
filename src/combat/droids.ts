@@ -8,9 +8,12 @@
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { FLAG, KIND, type Register } from "../game/register";
+import { POISE_DEFAULTS } from "../game/poise";
 import { InfantrySwarm, INFANTRY_DEFAULTS, DOWN, FIRING, type InfantryValues } from "./infantry";
 
 export const DROID_DEFAULTS = {
+  // Stagger (src/game/poise.ts; sliders in the mech's list): droidValues hands them on, poiseDroid as the swarm's poise.
+  ...POISE_DEFAULTS,
   droidHeight: 3.2,
   droidRadius: 0.5,
   droidHp: 70,
@@ -129,6 +132,8 @@ export function droidValues(d: DroidValues, out: InfantryValues = { ...INFANTRY_
   out.stompKill = 0; out.stompPush = 0; out.banditStompSpeed = 0;
   out.deathThrow = 1.5; out.bodyLife = d.droidBodyLife; out.sinkTime = 2.5;
   out.diveChance = d.droidDodge; out.diveSpeed = 3.5; out.diveTime = 1.1;
+  for (const k of Object.keys(POISE_DEFAULTS) as (keyof typeof POISE_DEFAULTS)[]) out[k] = d[k] ?? POISE_DEFAULTS[k];
+  out.poiseBandit = d.poiseDroid ?? POISE_DEFAULTS.poiseDroid;
   return out;
 }
 

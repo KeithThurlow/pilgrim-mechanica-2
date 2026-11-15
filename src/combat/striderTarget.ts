@@ -128,13 +128,16 @@ export class StriderTarget implements Hittable, Owner {
 
   armourOf() { return this.pack.v.striderArmour; }
 
-  damage(amount: number, _at: THREE.Vector3, _dir: THREE.Vector3, pierce?: number) {
+  damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     const s = this.last.s;
     if (!s || !s.alive) return;
     const part = this.last.cap.part;
     this.partHits[part]++;
-    this.pack.hit(s, armourHit(amount * s.partShare(part), this.armourOf(), pierce));
+    this.pack.hit(s, armourHit(amount * s.partShare(part), this.armourOf(), pierce), dir.x, dir.z);
   }
+
+  /** Stagger build on the strider last hit (src/game/poise.ts; a sword's extra). */
+  poise(amount: number, dir: THREE.Vector3) { const s = this.last.s; if (s?.alive) s.stagger(amount, dir.x, dir.z); }
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.last.cap.a, this.last.cap.b, out); }
 
@@ -152,7 +155,7 @@ export class StriderTarget implements Hittable, Owner {
       const m = s.up(1, A);
       if (o.cover?.(m.x, m.y, m.z) && near > 1.5) continue;
       const share = 1 - 0.5 * Math.max(0, near) / Math.max(0.1, radius);
-      this.pack.hit(s, armourHit(damage * share * s.partShare(part) * this.pack.v.striderBlast, this.armourOf(), o.pierce));
+      this.pack.hit(s, armourHit(damage * share * s.partShare(part) * this.pack.v.striderBlast, this.armourOf(), o.pierce), m.x - at.x, m.z - at.z);
       n++;
     }
     return n;

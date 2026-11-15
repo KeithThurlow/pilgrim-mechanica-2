@@ -123,6 +123,7 @@ import type { HealTarget } from "../abilities/zones";
 import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, type MechPose } from "../physics/mechWreck";
 import { MechFxView, type MechFx } from "./mechFx";
 import { shotLine } from "../weapons/shotLine";
+import { Poise, POISE_DEFAULTS, POISE_PARAMS } from "./poise";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
@@ -134,6 +135,8 @@ export const MECH_DEFAULTS = {
   ...SOLID_DEFAULTS,
   ...REPAIR_DEFAULTS,
   ...ABILITY_DEFAULTS,
+  // Stagger for every unit (Keith 2026-11-15; src/game/poise.ts): the sliders live here, in every combat lab's list.
+  ...POISE_DEFAULTS,
   /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
   trample: 1,
   crush: 1,
@@ -164,6 +167,7 @@ export const MECH_PARAMS: Param[] = [
   ...SOLID_PARAMS,
   ...REPAIR_PARAMS,
   ...ABILITY_PARAMS,
+  ...POISE_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
   { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
   { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },
@@ -212,6 +216,9 @@ export class MechUnit implements Hittable, Solid {
   /** Recent hits for the HUD's hit arcs: where each came from (unit x, z on the ground) and how much it took. Newest
    *  last, at most 8; the HUD drains it. */
   readonly hits: { dx: number; dz: number; amount: number }[] = [];
+  /** Stagger (src/game/poise.ts, host): enough hurt close together and the legs stagger (no control) and it is shoved
+   *  along the hit; swords add their extra through poise(). */
+  readonly poiseState = new Poise();
   /** Repair kits carried (src/game/repair.ts): Q uses one (the useKit command). */
   readonly kits: RepairKits;
   /** Timed abilities from the hull and pack (src/abilities/abilities.ts): keys 3 and 4. */
@@ -394,6 +401,7 @@ export class MechUnit implements Hittable, Solid {
     this.health = this.maxHealth;
     this.alive = true;
     this.deadFor = 0;
+    this.poiseState.clear();
     this.fx?.clearWreck();
     this.goCold();
     this.fx?.reset();
@@ -412,6 +420,7 @@ export class MechUnit implements Hittable, Solid {
     // A pilot in: the legs may flex now and then while it stands (the walker's idle).
     if (this.piloted && !cmd.idle) cmd = { ...cmd, idle: true };
     this.hurt = Math.max(0, this.hurt - dt * 400);
+    this.poiseState.tick(dt, this.v);
     // Out of the mech: the weapons go cold (nothing held keeps charging or painting; Keith 2026-10-31).
     if (this.wasPiloted && !this.piloted) this.goCold();
     this.wasPiloted = this.piloted;
@@ -643,7 +652,22 @@ export class MechUnit implements Hittable, Solid {
       if (last && last.dx * dx + last.dz * dz > 0.97) last.amount += amount;
       else { this.hits.push({ dx, dz, amount }); if (this.hits.length > 8) this.hits.shift(); }
     }
-    if (this.health <= 0) this.destroy();
+    if (this.health <= 0) { this.destroy(); return; }
+    this.stagger(amount, dir);
+  }
+
+  /** Stagger build on this mech (src/game/poise.ts; a sword's extra on top of its damage). */
+  poise(amount: number, dir: THREE.Vector3) { if (this.alive) this.stagger(amount * this.abilities.damageScale, dir); }
+
+  /** Hurt into the stagger build: past the mech's poise the legs stagger and it is shoved along dir. True if it did. */
+  private stagger(amount: number, dir: THREE.Vector3): boolean {
+    const v = this.v, sim = this.sim;
+    const t = this.poiseState.hit(amount, v.poiseMech * this.maxHealth, v);
+    if (t <= 0 || sim.airborne) return t > 0;
+    sim.stagger = Math.max(sim.stagger, t);
+    const l = Math.hypot(dir.x, dir.z);
+    if (l > 1e-4 && v.shoveMech > 0) sim.knock((dir.x / l) * v.shoveMech, (dir.z / l) * v.shoveMech);
+    return true;
   }
 
   private wasPiloted = false;

@@ -24,7 +24,7 @@ import { TRAMPLE_DEFAULTS, type MechBody, type TrampleValues } from "../combat/t
 /** The swarm's outside methods that change it: recorded on the view, applied in the worker. */
 export const ROBOT_OPS = [
   "spawn", "remove", "damage", "hitAt", "hurtLeg", "hurtOwn", "trample", "stomp", "setTarget", "clearTarget",
-  "setFrozen", "shakeOff", "scaleHp", "setHealth", "setPace", "setShooter", "primeAttacks",
+  "setFrozen", "shakeOff", "scaleHp", "setHealth", "setPace", "setShooter", "primeAttacks", "poise",
 ] as const;
 
 /**
