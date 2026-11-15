@@ -1,0 +1,48 @@
+{
+ "id": "turretTruck",
+ "kind": "vehicle",
+ "name": "Turret truck",
+ "maker": "War band",
+ "says": "the heavy gun: timber crib, chains, outriggers under a tank turret",
+ "tris": 5280,
+ "meshes": 4,
+ "size": [
+  4.55,
+  2.545,
+  8.018
+ ],
+ "min": [
+  -2.275,
+  -1.11,
+  -4.0181
+ ],
+ "max": [
+  2.275,
+  1.435,
+  4.0002
+ ],
+ "sockets": {
+  "Turret": [
+   0.0,
+   1.15,
+   -1.86
+  ]
+ },
+ "moving": {
+  "Paint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Wheel": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/warband.py"
+}

@@ -204,18 +204,20 @@ def technical():
     return b
 
 
-def heavy(pid, name, seed, says, six):
+def heavy(pid, name, seed, says, six, tt=False):
     """The gun truck and the six-wheeler: one build, two characters. Both are armoured cab trucks with a plough nose,
     slat armour down the bed and a gun ring; the six-wheeler is longer on a tandem rear, in olive, its ring up on a
     pedestal inside a wall of sandbags, jerrycans and a spare wheel on the bed."""
     b = K.Build(pid, "vehicle", name, seed, "War band", says)
     paint = b.node("Paint", (0, 0, 0))
-    R, T = 0.6, 2.3
-    if six:
+    R, T, hw = (0.62, 2.4, 1.15) if tt else (0.6, 2.3, 1.10)
+    if tt:
+        # the turret truck: the six-wheeler's chassis, heavier, a salvaged tank turret on a timber crib on the bed
+        HUB, axles, front, back, deck, cab0, cab1, bed0, gy = -0.58, [-2.30, 1.60, 3.00], -3.35, 3.85, 0.25, -1.75, -0.05, 0.07, 1.86
+    elif six:
         HUB, axles, front, back, deck, cab0, cab1, bed0, gy = -0.60, [-2.15, 1.45, 2.85], -3.20, 3.70, 0.22, -1.60, 0.10, 0.22, 1.76
     else:
         HUB, axles, front, back, deck, cab0, cab1, bed0, gy = -0.55, [-2.30, 2.30], -3.35, 3.15, 0.27, -1.75, -0.05, 0.07, 1.51
-    hw = 1.10
     zb, zt, top = deck - 0.56, deck + 0.26, deck + 1.0
     door = OLIVE if six else SAND
 
@@ -270,10 +272,11 @@ def heavy(pid, name, seed, says, six):
     for s in (-1, 1):
         V.louvres(P, (s * 0.40, hy, zt + 0.09), X_, Y_, UP, 0.46, cab0 - front - 0.80, 5, "dark", DARK, tilt=0.5, t=0.02)
     V.surf_blk(P, (0.92, hy, zt), X_, Y_, UP, 0.16, cab0 - front - 0.5, 0.012, "trim", HAZARD)
+    sk = -0.62 if tt else 0.0                                                # the turret truck's stacks stay under the barrel
     for s in (-1, 1):
-        V.pipe_run(P, [(s * 0.80, cab1 + 0.02, zb + 0.3), (s * 0.80, cab1 + 0.14, deck + 0.2), (s * 0.80, cab1 + 0.14, top + 0.72)], 0.065, "dark", DARK, bend=0.10, n=6)
-        V.cyl(P, (s * 0.80, cab1 + 0.14, top + 0.30), 0.10, 0.56, "z", 8, None, "trim", STEEL)
-        V.cyl(P, (s * 0.80, cab1 + 0.14, top + 0.76), 0.085, 0.09, "z", 6, [(0, 1.0), (1, 1.25)], "dark", DARK)
+        V.pipe_run(P, [(s * 0.80, cab1 + 0.02, zb + 0.3), (s * 0.80, cab1 + 0.14, deck + 0.2), (s * 0.80, cab1 + 0.14, top + 0.72 + sk)], 0.065, "dark", DARK, bend=0.10, n=6)
+        V.cyl(P, (s * 0.80, cab1 + 0.14, top + 0.30 + sk * 0.6), 0.10, 0.56 + sk * 0.6, "z", 8, None, "trim", STEEL)
+        V.cyl(P, (s * 0.80, cab1 + 0.14, top + 0.76 + sk), 0.085, 0.09, "z", 6, [(0, 1.0), (1, 1.25)], "dark", DARK)
 
     # ---- the arches: plate fenders over each axle group, mud flaps, steps up to the cab
     for s in (-1, 1):
@@ -306,16 +309,18 @@ def heavy(pid, name, seed, says, six):
         V.bolt_row(P, (s * (hw - 0.045), cab0 + 0.15, zt + 0.02), (s * (hw - 0.045), cab1 - 0.15, zt + 0.02), 6, s * X_, 0.02, col=STEEL)
         V.surf_blk(P, (s * (hw - 0.02), cy - 0.35, zt + 0.20), Y_, Z_, s * X_, 0.12, 0.035, 0.035, "dark", DARK)
     B(P, (0, cy + 0.05, top + 0.04), (2 * hw - 0.34, cab1 - cab0 - 0.05, 0.04), "secondary", BONE if six else RUST, ch=0.01)
-    B(P, (0, cab0 + 0.52, top + 0.10), (1.60, 0.12, 0.09), "dark", DARK, ch=0.02)
+    lb = -0.16 if tt else 0.10                                               # the turret truck's lamps sit on the cab's brow
+    B(P, (0, cab0 + (0.30 if tt else 0.52), top + lb), (1.60, 0.12, 0.09), "dark", DARK, ch=0.02)
     for x in (-0.6, -0.3, 0.0, 0.3, 0.6):
-        V.cyl(P, (x, cab0 + 0.455, top + 0.11), 0.07, 0.05, "y", 8, None, "trim", STEEL)
-        b.lamp((x, cab0 + 0.428, top + 0.11), 0.056, FWD, AMBER)
-    V.bar(P, (-0.7, cab1 - 0.2, top + 0.05), (-0.74, cab1 - 0.05, top + 1.1), 0.013, "trim", STEEL, 4, r2=0.005)
+        V.cyl(P, (x, cab0 + (0.235 if tt else 0.455), top + lb + 0.01), 0.07, 0.05, "y", 8, None, "trim", STEEL)
+        b.lamp((x, cab0 + (0.208 if tt else 0.428), top + lb + 0.01), 0.056, FWD, AMBER)
+    if not tt:
+        V.bar(P, (-0.7, cab1 - 0.2, top + 0.05), (-0.74, cab1 - 0.05, top + 1.1), 0.013, "trim", STEEL, 4, r2=0.005)
 
     # ---- the bed: floor, capped sides with slat armour, tailgate, tail lamps
     by = (bed0 + back) / 2
     B(P, (0, by, deck + 0.025), (2 * hw - 0.24, back - bed0 - 0.2, 0.03), "dark", DARK, ch=0.004)
-    slats = 7 if six else 5
+    slats = 0 if tt else 7 if six else 5
     for s in (-1, 1):
         B(P, (s * (hw - 0.05), by + 0.04, zt + 0.03), (0.14, back - bed0 - 0.06, 0.06), "trim", STEEL, ch=0.012)
         B(P, (s * (hw + 0.13), by, deck + 0.50), (0.07, back - bed0 - 0.3, 0.09), "trim", STEEL, ch=0.01)
@@ -327,16 +332,40 @@ def heavy(pid, name, seed, says, six):
     for s in (-1, 1):
         b.lamp((s * 0.90, back + 0.025, deck - 0.18), (0.18, 0.09), BACK, TAIL)
         V.bar(P, (s * 0.44, back, zb + 0.02), (s * 0.44, back + 0.16, zb - 0.02), 0.035, "trim", STEEL, 5)
-    # the cage behind the cab
+    # the cage behind the cab (not on the turret truck: the barrel swings over the cab)
     cz, ky = top + 0.45, bed0 + 0.05
-    for s in (-1, 1):
+    for s in () if tt else (-1, 1):
         x = s * (hw - 0.14)
         V.bar(P, (x, ky, deck), (x, ky, cz), 0.05, "trim", STEEL, 6)
         V.bar(P, (x, ky, cz), (x * 0.92, cy + 0.2, top + 0.06), 0.045, "trim", STEEL, 6)
         V.bar(P, (x, ky, cz), (x, ky + 0.8, zt), 0.04, "trim", STEEL, 6)
-    V.bar(P, (-hw + 0.14, ky, cz), (hw - 0.14, ky, cz), 0.05, "trim", STEEL, 6)
+    if not tt:
+        V.bar(P, (-hw + 0.14, ky, cz), (hw - 0.14, ky, cz), 0.05, "trim", STEEL, 6)
 
     # ---- the gun's ring (the game's turret sits on it) and the load round it
+    if tt:
+        # five layers of timber, chained down; outriggers kicked out to the sand; a spare on the door
+        crib = deck + 0.8
+        for i in range(5):
+            z = deck + 0.12 + i * 0.15
+            for s in (-1, 1):
+                c = (s * 0.75, gy, z) if i % 2 == 0 else (0, gy + s * 0.75, z)
+                B(P, c, (0.2, 1.9, 0.15) if i % 2 == 0 else (1.9, 0.2, 0.15), "secondary", BONE if i % 2 == 0 else SAND, ch=0.02)
+        for s in (-1, 1):
+            for t in (-1, 1):
+                V.bar(P, (s * 0.9, gy + t * 0.9, crib), (s * hw, gy + t * 1.0, deck), 0.028, "dark", DARK, 5)
+                y = gy + t * 1.55
+                V.bar(P, (s * (hw - 0.1), y, deck - 0.1), (s * (hw + 0.9), y + t * 0.2, HUB - R + 0.15), 0.065, "trim", STEEL, 6)
+                B(P, (s * (hw + 0.9), y + t * 0.2, HUB - R + 0.12), (0.45, 0.45, 0.06), "dark", DARK, ch=0.01)
+        V.cyl(P, (0, gy, crib + 0.02), 0.9, 0.16, "z", 12, None, "dark", DARK)
+        V.cyl(P, (0, gy, crib + 0.085), 0.96, 0.04, "z", 12, None, "trim", STEEL)
+        V.cyl(P, (hw + 0.10, cy, zt + 0.16), R * 0.85, 0.26, "x", 12, [(0, 0.86), (0.25, 1), (0.75, 1), (1, 0.86)], "dark", TYRE)
+        V.cyl(P, (hw + 0.24, cy, zt + 0.16), R * 0.4, 0.04, "x", 8, None, "trim", STEEL)
+        for i in range(3):
+            B(P, (-0.6 + i * 0.6, bed0 + 0.40, deck + 0.20), (0.46, 0.5, 0.32), "secondary", OLIVE if i != 1 else RUST, ch=0.025)   # shell crates behind the cab
+        wheel(b, R, 0.5, 10)
+        b.socket("Turret", (0, gy, crib + 0.1))
+        return b
     if six:
         K.lathe(P, (0, gy, deck + 0.04), (0, gy, deck + 0.60), [(0, 0.34), (0.15, 0.275), (0.85, 0.275), (1.0, 0.36)], 10, "dark", DARK)
         ring_z = deck + 0.65
@@ -380,7 +409,13 @@ def six_wheeler():
     return heavy("sixWheeler", "Six-wheeler", 83, "the long gun: tandem rear, pedestal ring in sandbags, jerrycans", True)
 
 
-VEHICLES = [technical, gun_truck, six_wheeler]
+def turret_truck():
+    """Says: the band's heavy gun. The six-wheeler's chassis under a salvaged tank turret, on a crib of timber chained to
+    the bed, outriggers kicked out to the sand."""
+    return heavy("turretTruck", "Turret truck", 84, "the heavy gun: timber crib, chains, outriggers under a tank turret", True, True)
+
+
+VEHICLES = [technical, gun_truck, six_wheeler, turret_truck]
 
 if __name__ == "__main__":
     a = K.parse_args()

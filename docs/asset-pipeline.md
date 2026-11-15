@@ -52,7 +52,7 @@ well, **B** a careful code model that reads but is plain up close, **C** boxes a
 | Crusher | primitives | C+ | Build: one hero model, the maw and pincers as moving nodes |
 | Strider | rods and discs | B- | Build after the crusher; keep the wiry disc-head read |
 | Humanoid robots, bandits | Mixamo Vanguard bake (box rifle) | B | Keep; a real rifle baked in (B1) |
-| War band vehicles (7 kinds), escorts | the technical, gun truck and six-wheeler modelled 2026-11-15 (`warband.py`); the rest boxes in `carBody.ts` | C+ | Build the other four the same way: bodies as GLBs on the same wheels and turrets |
+| War band vehicles (7 kinds), escorts | the technical, gun truck, six-wheeler and turret truck modelled 2026-11-15 (`warband.py`); the rest boxes in `carBody.ts` | C+ | Build the other three the same way: bodies as GLBs on the same wheels and turrets |
 | Bandit and rival mechs, replicas | the Rampart, repainted | A | Keep; they gain the new arms, packs and sensors for free |
 | Attack drones, turret quads, scrap swarm | primitives | C | Build with the robots (same family, your colours) |
 
