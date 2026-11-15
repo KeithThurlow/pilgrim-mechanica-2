@@ -272,7 +272,7 @@ src/physics/            deaths (Rapier world of the dead: ragdolls, wrecks), bod
 public/models/          GLB models (provenance in docs/assets.md)
 tools/                  *-check.ts headless checks, shots.mjs screenshots; partgen/ (generated parts: ComfyUI client, splat to mesh,
                         game prep, kinds read from the Rampart; output in public/models/gen/)
-docs/                   design.md (the game), decisions.md (log)
+docs/                   design.md (the game), decisions.md (log), art-style.md (the look every model follows)
 ```
 
 ## Key conventions
