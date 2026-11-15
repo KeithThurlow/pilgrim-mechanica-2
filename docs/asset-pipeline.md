@@ -6,6 +6,10 @@ for the inventory, and free rein on the inventory layout. Keith's PC (the refere
 is off for a few days, so this starts from the repo. Not blocked on Keith: defaults are picked here and listed under
 Open questions. Work is on `claude/project-thread-vum2tc`, one PR per batch.
 
+**The look every model follows: `docs/art-style.md`** (Keith 2026-11-15: retro-futuristic military sci-fi, not
+steampunk). Read it before building or rebuilding a model; it lists shapes, materials, colour, detailing, the
+models that drift today, and where the reference art is on Keith's PC.
+
 ## What changed today: Blender runs in the cloud
 
 Until now models waited for Keith's PC (`docs/asset-list.md`: "the cloud sessions have no Blender"). They don't any
@@ -127,6 +131,9 @@ each with a what-to-play list.
 | 9 | Second pass on the TS-kit weapons; flamers and freeze rays | B to A |
 
 ## To check against the reference art when Keith's PC is back
+
+Keith's PC was back 2026-11-15 and the references are read into `docs/art-style.md` (house rules, makers, the robot,
+strider and crusher notes, the folder index). The list below is what each batch still checks its own models against.
 
 - Brand looks: each maker's `notes.md` in `art-refs/` (Stratford-Aegis, Novus-Lux, Suzaku, Goliath Earthworks). Until
   then packs, arms and sensors follow the Rampart family and the variants already built for those makers.

@@ -325,6 +325,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-15 · Art style guide: retro-futuristic military sci-fi, not steampunk (Keith; Claude on `claude/project-thread-xx8bg5`)
+`docs/art-style.md` (new, from Keith's reference art on his PC: shapes, materials, colour, detailing, do and don't, makers, enemies, the models that drift, the reference folder index), linked from `docs/asset-pipeline.md`, the mech-modeling skill and `CLAUDE.md`. Docs only, no model changed: the arc caster, Sunder beam and plasma cannon, particle orb and the brass trim are listed for the rebuild threads. Checked: `npm test` 114/114.
+
 ### 2026-11-15 · `npm run play`: one command to pull main, install, build and serve (Keith; Claude)
 `tools/play.mjs` (`--dev` for hot reload), `package.json`, top of `README.md`. Checked: `npm test` 114/114, `npm run build`.
 
@@ -1035,7 +1038,7 @@ There was no shield: the dome was blast-wave orbs from the bandits' rockets (pos
 - New `swordRing`: about a second of struck-steel partials after a cut's first hit, pitch by sword (Buster 0.6, Short 1, Breaker 1.25), 0.5 on flesh (`Sword sound` sliders).
 - Ten smashes (was six) with sharpness, hollowness, hold and a torn-steel shriek drawn per variant; wider pitch and layer level per hit; swipe and scrape in five cuts each, the scrape from five stretches of the recording (new sample slider "Each variant starts later by"). Smash still measures close to the clip. `npm test`.
 ### 2026-11-05 · Sword lunges no longer cancel charges (Keith asked; Claude on `claude/project-thread-n01dm9`)
-- A sword's lunge pushes the walker, which started a dash and so dropped rail and energy (Nova Lance etc.) charges. The walker now marks a push-started dash (`dashCancels` in `src/mech/walker.ts`); `src/weapons/arsenal.ts` drops charges only for a pressed dash or sprint. Checked: `npm test`.
+- A sword's lunge pushes the walker, which started a dash and so dropped rail and energy (Nova Lance etc.) charges. The walker now marks a push-started dash (`dashCancels` in `src/mech/walker.ts`); `src/weapons/arsenal.ts` drops charges only for a pressed dash or sprint. Checked: `npm test` 114/114.
 ### 2026-11-05 · npm test runs the checks side by side (overnight perf pass; Claude on `claude/project-thread-4kcrrl`)
 - `tools/run-checks.mjs` finds every `tools/*-check.ts` (plus `balance-sheet.ts --check`) and runs them as separate processes, one per core, slowest first by the last run's times (`node_modules/.cache/check-times.json`). Output only for failures; it ends with the slowest five. Flags: `--verbose`, `-j N`, name filters (`npm test -- duel`). `npm run test:serial` is the old one-at-a-time order.
 - Before: 7 min 00 s on 4 cores. After: 3 min 32 s, all 80 pass; duel-check alone (194 s) is now the floor. A failed check runs once more on its own before it counts: dents-check's "coarse grid beside the plough" can fail under load, because the patch fill has a ms budget (it passes on its own; worth a look: under load the coarse grid lags the chunks' by up to 1.7 m).
@@ -1063,7 +1066,7 @@ There was no shield: the dome was blast-wave orbs from the bandits' rockets (pos
 - Checked: smash against the clip by octave band (within about 6 dB from 125 Hz up in the first 0.25 s; level down 5 dB at 120 ms, 9 at 200, 12 at 280, the clip 5, 8, 11). `npm test`.
 
 ### 2026-11-05 · Sword poses from the pose lab: rising and vertical cuts, close variants (Keith; Claude on `claude/project-thread-nri3l4`)
-- `src/weapons/swordPoses.ts`: sword-light, sword-short and sword-heavy replaced with Keith's exported keys exactly (all keys listed, none dropped). Checked: `npm test`.
+- `src/weapons/swordPoses.ts`: sword-light, sword-short and sword-heavy replaced with Keith's exported keys exactly (all keys listed, none dropped). Checked: `npm test` 114/114.
 
 ### 2026-11-05 · Lookout towers on the fortress (Keith's playtest: "a vertical container that's built up... a bandit or two at the top"; Claude on `claude/project-thread-exzrkr`)
 - Stacked-container towers (3 levels crossed, 7.5 m) by the gates, 3 in the outer yard and one less per yard inward (keep at least 1), each with a crew of 1-2 on top: rifles (70 m), grenadiers (lobs every 3.2 s, 50 m, 60 damage) or rocketeers (every 4.5 s, 95 m, 110 damage), shells telegraphed by `bf.lob`. A tower is a target (1800 hp, armour 2); down, it topples, drops out of the ground (the flow field reroutes) and its crew dies. Files: `src/pois/towers.ts`, `towersDraw.ts`, `fortress.ts` (`Tower`, tower blocks), `fortressGround.ts`, `src/expedition/fortresses.ts`, labs fortress and convoy (hold-V, Fortress: towers topic).
