@@ -731,7 +731,12 @@ export class Arsenal implements MechWeapons {
       // A mech facing the cut with a free sword blocks it (Keith 2026-11-01): less damage and knock, the blade stalls.
       const power = s.sword.power;
       const met = t.parry?.(u.sim.pos.x, u.sim.pos.z, power) ?? { take: 1 }, take = met.take, blocked = take < 1 && !met.broke;
-      t.damage(cutDamage(st, v, s.sword.span) * (power ? v.swordPowerDamage : 1) * (s.sword.vertical ? v.swordVertDamage : 1) * u.damageScale * take, at, kd, st.ap);
+      const cut = cutDamage(st, v, s.sword.span) * (power ? v.swordPowerDamage : 1) * (s.sword.vertical ? v.swordVertDamage : 1) * u.damageScale * take;
+      // Swords stagger (Keith 2026-11-15, src/game/poise.ts): the cut counts swordPoise × toward it, its extra first (the
+      // damage then counts once more and tips it over, the stagger as long as the whole cut makes it), not through a block.
+      const sp = (v as { swordPoise?: number }).swordPoise ?? 2.5;
+      if (!blocked && sp > 1) t.poise?.(cut * (sp - 1), kd);
+      t.damage(cut, at, kd, st.ap);
       if (v.swordKnock > 0) t.knock?.(at, kd, v.swordKnock * (blocked ? v.swordBlockKnock : 1));
       if (met.parried) {
         // The blades met (Keith 2026-11-01): a clash of sparks and light, a bend in the air, a loud ching; my blade

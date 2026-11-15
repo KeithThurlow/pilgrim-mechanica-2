@@ -75,17 +75,20 @@ export class CrusherTarget implements Hittable, Owner {
 
   armourOf() { return this.pack.v.crusherArmour; }
 
-  damage(amount: number, _at: THREE.Vector3, _dir: THREE.Vector3, pierce?: number) {
+  damage(amount: number, _at: THREE.Vector3, dir: THREE.Vector3, pierce?: number) {
     const c = this.last;
     if (!c || !c.alive) return;
     const part = this.lastCap.part;
     this.partHits[part]++;
-    this.pack.hit(c, armourHit(amount * c.partShare(part), this.armourOf(), pierce));
+    this.pack.hit(c, armourHit(amount * c.partShare(part), this.armourOf(), pierce), dir.x, dir.z);
   }
+
+  /** Stagger build on the crusher last hit (src/game/poise.ts; a sword's extra). */
+  poise(amount: number, dir: THREE.Vector3) { if (this.last?.alive) this.last.stagger(amount, dir.x, dir.z); }
 
   normalAt(at: THREE.Vector3, out: THREE.Vector3) { return capsuleNormal(at, this.lastCap.a, this.lastCap.b, out); }
 
-  splash(at: THREE.Vector3, radius: number, damage: number, _dir: THREE.Vector3, o?: SplashOpts): number {
+  splash(at: THREE.Vector3, radius: number, damage: number, dir: THREE.Vector3, o?: SplashOpts): number {
     if (!o?.blast) return 0;
     let n = 0;
     for (const c of this.pack.list) {
@@ -98,7 +101,7 @@ export class CrusherTarget implements Hittable, Owner {
       if (near > radius) continue;
       if (o.cover?.(c.x, c.bodyY, c.z) && near > 1.5) continue;
       const share = 1 - 0.5 * Math.max(0, near) / Math.max(0.1, radius);
-      this.pack.hit(c, armourHit(damage * share * c.partShare(part) * this.pack.v.crusherBlast, this.armourOf(), o.pierce));
+      this.pack.hit(c, armourHit(damage * share * c.partShare(part) * this.pack.v.crusherBlast, this.armourOf(), o.pierce), c.x - at.x || dir.x, c.z - at.z || dir.z);
       n++;
     }
     return n;

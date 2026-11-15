@@ -51,6 +51,7 @@ import { DUST_DEFAULTS, DUST_PARAMS } from "../../src/fx/dust";
 import { SFX_DEFAULTS, SFX_PARAMS } from "../../src/audio/sfx";
 import { Battlefield } from "../../src/game/battlefield";
 import { MechUnit, MECH_DEFAULTS, MECH_PARAMS } from "../../src/game/mechUnit";
+import { POISE_TOPIC } from "../../src/game/poise";
 import { loadoutLevel } from "../../src/combat/rivalKit";
 import { ConvoyRoute, ROUTE_DEFAULTS, ROUTE_PARAMS } from "../../src/convoy/route";
 import { Convoy, PLATFORM_DEFAULTS, PLATFORM_PARAMS } from "../../src/convoy/platform";
@@ -762,6 +763,7 @@ const panel = tweakPanel({
   topics: [
     PILOT_TOPIC, SUMMON_TOPIC,
     { id: "health", label: "Health and repair", groups: ["Mech health", "Repair kits", "Health HUD", "Mech doll"] },
+    POISE_TOPIC,
     ABILITY_TOPIC,
     { id: "loadout", label: "Loadout", groups: ["Loot rolls", "Loot slot mix", "Bare mech", "Leg load", "Grid", "Item sizes", "Hull weapon sizes", "Salvage blocks"] },
     { id: "convoy", label: "Convoy", groups: ["Convoy route", "Train", "Footbridges", "Platforms"] },

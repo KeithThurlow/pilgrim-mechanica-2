@@ -94,6 +94,9 @@ export interface Hittable {
   slow?(key: number, pace: number): void;
   /** The surface normal where the last hitRay struck (sparks ricochet off it); else they fly back along the round. */
   normalAt?(at: THREE.Vector3, out: THREE.Vector3): THREE.Vector3;
+  /** Stagger (src/game/poise.ts): add this much to the stagger build of what was just hit (a sword's extra on top of
+   *  its damage, which builds it anyway), shoved along dir if it staggers. */
+  poise?(amount: number, dir: THREE.Vector3): void;
   /** After a hit: throw what was just hit along dir at this speed (m/s), if it's light enough (the rail cannon). */
   knock?(at: THREE.Vector3, dir: THREE.Vector3, speed: number): void;
   /** A sword cut from a cutter standing at (x, z) is about to land: a mech with a free sword facing it blocks, one
