@@ -22,7 +22,7 @@ export const POISE_DEFAULTS = {
   /** Sword cuts count this many times their damage toward a stagger. */
   swordPoise: 2.5,
   // Poise per kind: the share of its full health it must take inside the window. Heavier kinds stand more.
-  poiseScrapper: 0.4,
+  poiseScrapper: 0,
   poiseCutter: 0.3,
   poiseQuad: 0.28,
   poiseExcavator: 0.14,
@@ -54,7 +54,7 @@ export const POISE_PARAMS: Param[] = [
   { key: "staggerGrace", label: "Grace after (s)", min: 0, max: 5, step: 0.05, group: G, tip: "No new stagger this long after one ends: no stun lock" },
   { key: "staggerShoveDrag", label: "Shove fades (/s)", min: 0.5, max: 20, step: 0.25, group: GS },
   { key: "swordPoise", label: "Sword counts (× damage)", min: 1, max: 6, step: 0.1, group: G, tip: "A sword cut adds this many times its damage to the build: it staggers reliably" },
-  { key: "poiseScrapper", label: "Scrappers", min: 0, max: 2, step: 0.01, group: GK, tip: "Share of full health taken inside the window that staggers it (scrappers are knocked down)" },
+  { key: "poiseScrapper", label: "Scrappers", min: 0, max: 2, step: 0.01, group: GK, tip: "Share of full health taken inside the window that staggers it. Scrappers are knocked down (0: never; off by default: a downed scrapper is out of reach of the rounds and bites that would kill it)" },
   { key: "poiseCutter", label: "Cutters", min: 0, max: 2, step: 0.01, group: GK },
   { key: "poiseQuad", label: "Weapon quads", min: 0, max: 2, step: 0.01, group: GK },
   { key: "poiseExcavator", label: "Excavators", min: 0, max: 2, step: 0.01, group: GK },
