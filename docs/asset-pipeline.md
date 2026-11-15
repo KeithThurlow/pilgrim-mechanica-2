@@ -120,7 +120,7 @@ each with a what-to-play list.
 | 2 | The contract check (`assets-check`) and inventory pictures from models | Keith asked; works on today's models and improves as they do |
 | 3 | Inventory layout and UI | Keith: free rein; own PR |
 | 4 | Arms ×3, sensors ×5, waist kit ×3 | Finishes the mech: no boxes left on it |
-| 5 | Swords ×3, feeds and capacitor, drone rack, hive | Items with boxes or nothing (moved ahead of the robots 2026-11-14) |
+| 5 | Swords ×3, feeds and capacitor, drone rack, hive; the five shoulder strikes (done 2026-11-14, `items.py`) | Items with boxes or nothing (moved ahead of the robots 2026-11-14) |
 | 6 | Robots: scrapper, cutter, excavator, quads; drones and the scrap swarm | Already designed in code to Keith's notes: rebuild with the robot reference art to hand |
 | 7 | Crusher, strider | Hero enemies |
 | 8 | War band vehicles and escorts | |

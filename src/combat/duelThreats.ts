@@ -91,7 +91,7 @@ export function weaponStates(a: Arsenal, unit: MechUnit, kit: readonly KitWeapon
     }
     const key = k.ctl.key, sh = a.shoulders.find((x) => x.key === key);
     if (!sh) return { i, ready: false, charge: 0 };
-    const ready = sh.weapon === "linemortar" ? sh.line.ready && !sh.line.flying : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0;
+    const ready = sh.strike ? sh.strike.ready : sh.weapon === "linemortar" ? sh.line.ready && !sh.line.flying : sh.weapon === "mortar" ? sh.mortar.ready : sh.weapon === "missiles" ? sh.swarm.ready : sh.cool <= 0;
     return { i, ready, charge: 0 };
   });
 }

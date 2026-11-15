@@ -57,6 +57,8 @@ const PICK_KEY = "pm2:weapons-lab:pick3", BAY_KEY = "pm2:loadout-lab:bay", RIVAL
 let ground: DuelGround | null = null;
 let rivalBody: RampartBody | null = null;
 let rivalArsenal: Arsenal | null = null;
+// For headless checks: the rival's weapons (window.__rivalArsenal()).
+(globalThis as unknown as { __rivalArsenal: () => Arsenal | null }).__rivalArsenal = () => rivalArsenal;
 let wrecks: WreckStandIns | null = null;
 const lab = await combatLab({
   id: "duel-lab",
