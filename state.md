@@ -325,6 +325,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-15 · Art style: brass off the technical and the cutting kit (`docs/art-style.md` "What drifts today"; the coordinator passed the guide on; Claude on `claude/project-thread-vum2tc`)
+- `tools/blender/parts/warband.py`: the technical's fuel drum cap is steel. `waist.py`: the cutting kit's valves and torch nozzle are dark steel; the autoloader's shells stay brass (ammunition, the guide's one exception). `technical.glb` and `waist-kit.glb` rebuilt. The cutting kit's inventory picture was not redrawn (a few pixels).
+- Checked: `npm test`.
+
 ### 2026-11-15 · Art style guide: retro-futuristic military sci-fi, not steampunk (Keith; Claude on `claude/project-thread-xx8bg5`)
 `docs/art-style.md` (new, from Keith's reference art on his PC: shapes, materials, colour, detailing, do and don't, makers, enemies, the models that drift, the reference folder index), linked from `docs/asset-pipeline.md`, the mech-modeling skill and `CLAUDE.md`. Docs only, no model changed: the arc caster, Sunder beam and plasma cannon, particle orb and the brass trim are listed for the rebuild threads. Checked: `npm test` 114/114.
 ### 2026-11-15 · Arc caster wind-up longer (Keith: "Artcaster could probably still do with a bit more wind up time"; Claude on `claude/project-thread-8rs14m`)

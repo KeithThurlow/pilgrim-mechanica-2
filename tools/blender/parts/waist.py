@@ -19,7 +19,7 @@ KHAKI, KHAKI_D, OLIVE, OLIVE_D = (0.63, 0.57, 0.42), (0.49, 0.45, 0.33), (0.42, 
 FRAME, BARE, RUBBER = (0.25, 0.25, 0.205), (0.58, 0.57, 0.52), (0.17, 0.165, 0.155)
 HAZARD, AMBER = (0.82, 0.52, 0.14), (1.0, 0.72, 0.30)
 WHITE, SLATE, NAVY, NBARE = (0.79, 0.81, 0.86), (0.35, 0.41, 0.57), (0.20, 0.22, 0.31), (0.70, 0.72, 0.77)
-BRASS, TEAL = (0.72, 0.56, 0.24), (0.35, 1.0, 0.92)
+BRASS, TEAL = (0.72, 0.56, 0.24), (0.35, 1.0, 0.92)   # brass is for shell cases only (docs/art-style.md)
 
 
 def B(P, c, size, mat="primary", col=(0.5, 0.5, 0.5), **k):
@@ -111,7 +111,7 @@ def waist_kit():
         x = s * 0.20
         K.lathe(b.body, (x, 0.26, -0.35), (x, 0.26, 0.24), [(0, 0.15), (0.05, 0.165), (0.80, 0.165), (0.93, 0.10), (1.0, 0.05)], 10,
                 "secondary", col)
-        V.cyl(b.body, (x, 0.26, 0.255), 0.035, 0.07, "z", 6, None, "trim", BRASS)                              # the valve
+        V.cyl(b.body, (x, 0.26, 0.255), 0.035, 0.07, "z", 6, None, "dark", FRAME)                               # the valve
         V.cyl(b.body, (x + s * 0.06, 0.26, 0.262), 0.04, 0.02, "x", 8, None, "trim", BARE)                     # its gauge
         V.cyl(b.body, (x, 0.26, -0.10), 0.172, 0.05, "z", 10, None, "dark", FRAME)                             # the strap
     B(b.body, (0, 0.10, 0.02), (0.72, 0.06, 0.07), "dark", FRAME, ch=0.01)
@@ -124,7 +124,7 @@ def waist_kit():
     # the torch, clipped across the top rear
     V.bar(b.body, (0.32, 0.50, 0.30), (-0.22, 0.50, 0.30), 0.028, "trim", BARE, 6)
     V.cyl(b.body, (0.24, 0.50, 0.30), 0.042, 0.16, "x", 6, None, "dark", FRAME)                                # the grip
-    V.bar(b.body, (-0.22, 0.50, 0.30), (-0.34, 0.56, 0.24), 0.02, "trim", BRASS, 5)                            # the nozzle
+    V.bar(b.body, (-0.22, 0.50, 0.30), (-0.34, 0.56, 0.24), 0.02, "dark", FRAME, 5)                             # the nozzle
     B(b.body, (0.0, 0.47, 0.25), (0.06, 0.06, 0.10), "dark", FRAME, ch=0.008)
     b.lamp((-0.345, 0.565, 0.235), (0.035, 0.035), Vector((-0.8, 0.5, -0.4)).normalized(), AMBER)
     b.socket("Mount", (0, 0, 0))

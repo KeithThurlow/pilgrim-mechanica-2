@@ -24,7 +24,7 @@ from mathutils import Matrix  # noqa: E402
 PAINT = (0.92, 0.92, 0.92)                      # multiplied by the vehicle's colour in the game
 STEEL, DARK, RUST, TYRE = (0.42, 0.415, 0.40), (0.21, 0.19, 0.18), (0.48, 0.23, 0.12), (0.14, 0.13, 0.125)
 HAZARD, SAND, TEAL, BONE, GLASS = (0.85, 0.63, 0.10), (0.79, 0.71, 0.54), (0.25, 0.42, 0.40), (0.85, 0.81, 0.72), (0.10, 0.09, 0.07)
-OLIVE, BRASS = (0.36, 0.35, 0.24), (0.72, 0.56, 0.24)
+OLIVE = (0.36, 0.35, 0.24)
 HEAD, TAIL, AMBER = (1.0, 0.95, 0.78), (1.0, 0.22, 0.12), (1.0, 0.70, 0.25)
 UP, FWD, BACK = Z_, -1 * Y_, Y_
 
@@ -190,7 +190,7 @@ def technical():
     K.lathe(P, (0.54, 0.84, deck + 0.04), (0.54, 0.84, deck + 0.58), [(0, 0.20), (0.04, 0.215), (0.96, 0.215), (1.0, 0.20)], 10, "secondary", RUST)   # the fuel drum
     for t in (0.2, 0.42):
         V.cyl(P, (0.54, 0.84, deck + t), 0.225, 0.025, "z", 10, None, "dark", DARK)
-    V.cyl(P, (0.60, 0.90, deck + 0.59), 0.035, 0.03, "z", 6, None, "trim", BRASS)
+    V.cyl(P, (0.60, 0.90, deck + 0.59), 0.035, 0.03, "z", 6, None, "trim", STEEL)
     V.cyl(P, (0.0, 2.36, 0.52), 0.34, 0.20, "y", 12, [(0, 0.86), (0.25, 1), (0.75, 1), (1, 0.86)], "dark", TYRE)                                      # the spare on the tailgate
     V.cyl(P, (0.0, 2.44, 0.52), 0.18, 0.06, "y", 8, None, "trim", STEEL)
     for s in (-1, 1):
