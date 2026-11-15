@@ -237,7 +237,7 @@ src/convoy/             route (heading + flattened road), safeZone (enemies stee
                         furniture, escort (escort driving), plough (the bulldozer that cuts the road) + wake (berms from the sand moved)
                         + ploughFx, walkways (decks, stairs, landings, footbridges as walkable
                         surfaces); drawing: platformBody, trackBody, pipesDraw, bridgeBody, craneBody, escortBody, kit
-src/vehicles/           car (vehicle sim), carBody (stand-in raider vehicles)
+src/vehicles/           car (vehicle sim), carBody (raider vehicles: boxes, or the kind's model), carModels (models by kind: public/models/vehicles/)
 src/combat/             warband (raider vehicles and bandit mechs) + partyBus (the bus's drops), infantry (bandit swarm) + infantryDraw, infantryTarget,
                         banditVat + banditAnim (Vanguard on a baked vertex animation texture; baker in tools/mixamo/),
                         robots (scrappers, cutters, excavators; its arrays are ECS columns: robotWorld) + robotLegs, robotShapes, robotsDraw, robotTarget, robotTearFx,

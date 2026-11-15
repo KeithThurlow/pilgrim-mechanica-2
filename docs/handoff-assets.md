@@ -23,7 +23,15 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
   `arsenal.ts` configure). Sword blades are built at true length and divided by it in the game. `partkit.sheet` takes a
   `target`. Headless shots: the weapons lab's picker hides the mech; use the swarm lab or the pose lab.
 
+- Vehicles (2026-11-15): `warband.py` (kind `vehicle`, into `public/models/vehicles/<CarKind>.glb`): `Body`, a `Paint`
+  node (near white, multiplied by the vehicle's colour in `CarBody.useModel`), `Glow`, a `Wheel` node (one wheel about
+  its hub, axle along x). Frame: the sim's body centre, front -Y; read the kind's numbers from `CAR_KINDS` and the
+  stand-in (`buildTruck` etc. in `src/vehicles/carBody.ts`: `hubY = R - rideHeight`, axles from `carAxles`, the turret's
+  place from `addTurret`). The technical is done; gun truck, six-wheeler, war rig, tank, turret truck, party bus to do
+  (the bus's bulbs are the body's own `glow`, keep them). Turrets are still code.
+
 ## Next, in order
+0. **The other six vehicles**, one PR each or in pairs, as the technical.
 1. **Robots** (was batch 5): on reading `src/combat/robotShapes.ts` they are not boxes. Each body is a designed, merged,
    instanced geometry built to Keith's own notes (2026-11-01 thorax, turret and abdomen; 2026-11-06 reactor mast) and
    tied to the leg specs (`HUB_R`, `MID_SPEC`, `BIG_SPEC`, saw and turret positions in `robotLegs.ts`), with eyes, saws
