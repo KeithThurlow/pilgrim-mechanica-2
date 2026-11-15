@@ -18,22 +18,18 @@ Plan, review and order: `docs/asset-pipeline.md`. Branch `claude/project-thread-
   built in another thread (PR 356, `arms.py`). Kit gotchas: `V.blk` takes the box's bottom (use the local `B` for a
   centre); a node's pieces are authored about the node's pivot.
 
+- Batch 6 (2026-11-14): `items.py` (swords, shoulder feeds and power, drone rack, hive, the five strikes) into
+  `public/models/parts/`, swapped in by `src/weapons/partSwap.ts` (`swordFromGlb`, `gearFromGlb`, `shoulderPart`; hooks in
+  `arsenal.ts` configure). Sword blades are built at true length and divided by it in the game. `partkit.sheet` takes a
+  `target`. Headless shots: the weapons lab's picker hides the mech; use the swarm lab or the pose lab.
+
 ## Next, in order
-1. **Batch 6 first** (items with boxes or nothing; robots moved after it, see below):
-   - Swords ×3 (`sword-light` Breaker, katana-like; `sword-heavy` Buster; `sword-short`). Today one code model,
-     `swordModel` in `src/weapons/models.ts`: a `swing` group (hilt, +Z from the hand), a `blade` group 1 long that the
-     arsenal stretches to the reach and thickens by base (`src/weapons/arsenal.ts` near "A heavier sword is a thicker"),
-     one `edge` glow material the arsenal drives. A GLB needs: hilt as Body, a `Blade` node 1 m long along forward with
-     its lit edge as the node's glow piece (`b.node_glow("Blade")`); the model must be picked by base id, not kind.
-   - Belt feed, incendiary feed, capacitor bank (`beltFeedModel`, `incendiaryFeedModel`, `capacitorModel`, same file;
-     each has a lamp in `m.glow` the arsenal lights). Drone rack and swarm hive have no model at all (`sh-drones`,
-     `sh-hive`): find where shoulder items without a `shoulder:` weapon are drawn (nothing today) and hang a part there.
-2. **Robots** (was batch 5): on reading `src/combat/robotShapes.ts` they are not boxes. Each body is a designed, merged,
+1. **Robots** (was batch 5): on reading `src/combat/robotShapes.ts` they are not boxes. Each body is a designed, merged,
    instanced geometry built to Keith's own notes (2026-11-01 thorax, turret and abdomen; 2026-11-06 reactor mast) and
    tied to the leg specs (`HUB_R`, `MID_SPEC`, `BIG_SPEC`, saw and turret positions in `robotLegs.ts`), with eyes, saws
    and lenses drawn apart. Rebuild them with `art-refs/robot-reference/` to hand (Keith's PC), keeping those anchors;
    until then leave them. Drones (`src/summon/dronesDraw.ts` `frameGeometry`) and the scrap swarm can go with them.
-3. Crusher, strider; war band vehicles; second pass on the kit weapons (`docs/asset-pipeline.md`).
+2. Crusher, strider; war band vehicles; second pass on the kit weapons (`docs/asset-pipeline.md`).
 
 ## How to test
 - Shots here: `npm run build`, then `CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome node tools/shots.mjs "<lab url>"`.

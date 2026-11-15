@@ -1,0 +1,33 @@
+{
+ "id": "sh-quake",
+ "kind": "shoulder",
+ "name": "Quake hammer",
+ "maker": "Stratford-Aegis",
+ "says": "piston and hammer head on a braced block",
+ "tris": 548,
+ "meshes": 2,
+ "size": [
+  0.9,
+  1.717,
+  0.88
+ ],
+ "min": [
+  -0.45,
+  0.0,
+  -0.46
+ ],
+ "max": [
+  0.45,
+  1.717,
+  0.42
+ ],
+ "sockets": {
+  "Muzzle": [
+   0.0,
+   1.8,
+   -0.0
+  ]
+ },
+ "moving": {},
+ "source": "tools/blender/parts/items.py"
+}
