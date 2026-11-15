@@ -20,7 +20,7 @@ import { PoiPads, rawGround } from "../src/world/poiPads";
 import { addModifier } from "../src/world/modifiers";
 import { SITE_DEFAULTS, buildSite } from "../src/pois/kinds";
 import { SiegeWalls, isSiege, wallHeight, wallMetal, fenced, routeVia, regionOf } from "../src/pois/fortressGround";
-import { ringR, type Layout } from "../src/pois/fortress";
+import { fortLayout, fortReach, ringR, type Layout } from "../src/pois/fortress";
 import { WalkerSim } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
@@ -455,6 +455,17 @@ const fort = sieges.find((p) => p.kind === "fortress")!;
       console.log(`gate surge: ${fresh.length} through the blown gate in 4 s, ${out} out on the sand after 20 s`);
     }
   }
+}
+
+// The walls' reach without laying the fortress out (perf 2026-11-15): the same number as the layout's, so a ground
+// read beyond it can skip the layout and still be right; and a far read through the walls lays nothing out.
+{
+  let off = 0;
+  for (let s = 1; s <= 60; s++) {
+    const p = { id: "reach" + s, kind: "fortress", x: s * 31, z: -s * 17, yaw: s * 0.7, seed: s * 104729 } as PoiPlacement;
+    if (fortReach(p, V as never) !== fortLayout(p, V as never).reach) off++;
+  }
+  if (off) fail(`the rings' reach differs from the layout's on ${off} of 60 fortresses`);
 }
 
 if (problems.length) { console.log(`FAIL ${problems.length} problem(s)`); throw new Error("fortress check failed"); }
