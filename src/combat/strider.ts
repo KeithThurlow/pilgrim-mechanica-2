@@ -16,9 +16,12 @@ import type { Param } from "../core/tweaks";
 import { WalkerSim, type Ground, type MoveCommand } from "../mech/walker";
 import { WALKER_DEFAULTS, type WalkerValues } from "../mech/walkerTuning";
 import type { RobotBeamEvent } from "./robots";
+import { Poise, POISE_DEFAULTS } from "../game/poise";
 import { beamDrag, beamPower, beamWidthShare, beamTicks, beamTickDamage, beamLive, dragAim, type BeamShape } from "./beamCore";
 
 export const STRIDER_DEFAULTS = {
+  // Stagger (Keith 2026-11-15; src/game/poise.ts: sliders in the mech's list, the Stagger topic).
+  ...POISE_DEFAULTS,
   striderScale: 1.7,
   striderSpeed: 4.8,
   striderHull: 4000,
@@ -248,6 +251,9 @@ export class Strider {
   rushT = 0;
   meleeClock = 0;
   private struck = false;
+  /** Stagger (src/game/poise.ts, host): staggered, it stops thinking (a charge or grab not yet loosed breaks off), its
+   *  legs stagger and it is knocked along. */
+  readonly poise = new Poise();
   private tearAcc = 0;
   private strafeClock: number;
   private seekClock = 0;
@@ -312,6 +318,8 @@ export class Strider {
       this.stepWalker(dt, stick, emit);
       return;
     }
+    this.poise.tick(dt, v);
+    if (this.poise.staggered) { this.stepWalker(dt, stick, emit); return; }
     const p = this.pos(T0);
     const has = !!prey && prey.alive;
     const dx = has ? prey!.x - p.x : 0, dz = has ? prey!.z - p.z : 0, dist = Math.hypot(dx, dz) || 1;
@@ -451,7 +459,7 @@ export class Strider {
   }
 
   /** Take damage after armour (the target adapter does the armour and the part's share). */
-  hit(amount: number, emit: (e: StriderEvent) => void) {
+  hit(amount: number, emit: (e: StriderEvent) => void, dirX = 0, dirZ = 0) {
     if (!this.alive || !(amount > 0)) return;
     this.health -= amount;
     this.hurt = Math.min(1, this.hurt + amount / 300);
@@ -459,7 +467,24 @@ export class Strider {
       this.health = 0; this.alive = false; this.mode = DOWNED; this.modeT = 0;
       const p = this.pelvis(T6);
       emit({ type: "down", id: this.id, x: p.x, y: p.y, z: p.z });
+      return;
     }
+    this.stagger(amount, dirX, dirZ);
+  }
+
+  /** Stagger build (src/game/poise.ts): every hit's damage and a sword's extra. Returns true if it staggered. */
+  stagger(amount: number, dirX: number, dirZ: number): boolean {
+    const v = this.v;
+    if (!this.alive) return false;
+    const t = this.poise.hit(amount, v.poiseStrider * this.maxHealth, v, v.staggerHeavyTime);
+    if (t <= 0) return false;
+    if (this.mode === BEAM && this.modeT < v.striderBeamCharge) { this.mode = WALK; this.modeT = 0; this.beamClock = v.striderBeamEvery * 0.5; }
+    else if (this.mode === SLAM) { this.mode = WALK; this.modeT = 0; this.slamClock = v.striderSlamEvery * 0.5; }
+    else if (this.mode === MELEE && !this.struck) { this.mode = WALK; this.modeT = 0; this.meleeClock = v.striderMeleeEvery * 0.5; }
+    this.sim.stagger = Math.max(this.sim.stagger, t);
+    const l = Math.hypot(dirX, dirZ);
+    if (l > 1e-5) this.sim.knock((dirX / l) * v.shoveHeavy / this.S, (dirZ / l) * v.shoveHeavy / this.S);
+    return true;
   }
 
   private stepWalker(dt: number, stick: { x: number; z: number }, emit: (e: StriderEvent) => void) {
@@ -503,7 +528,7 @@ export class Striders {
     for (const s of this.list) if (!s.frozen) s.update(dt, prey, sees, this.emit);
   }
 
-  hit(s: Strider, amount: number) { s.hit(amount, this.emit); }
+  hit(s: Strider, amount: number, dirX = 0, dirZ = 0) { s.hit(amount, this.emit, dirX, dirZ); }
 
   remove(s: Strider) { const k = this.list.indexOf(s); if (k >= 0) this.list.splice(k, 1); }
 }

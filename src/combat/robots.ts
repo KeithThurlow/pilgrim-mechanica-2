@@ -25,6 +25,7 @@ import {
 import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
 import { RobotBlock } from "./robotWorld";
 import type { World } from "../ecs/world";
+import { POISE_DEFAULTS, poiseFade, poiseHitAt, poiseTickAt, clearPoiseAt, type PoiseCols } from "../game/poise";
 import { WEAK_DEFAULTS, WEAK_PARAMS, BIG_CORE_Y, crippleK, legsLost, raySphere, stumpWay } from "./robotWeakPoints";
 
 export const ROBOT_DEFAULTS = {
@@ -304,6 +305,8 @@ export const ROBOT_DEFAULTS = {
   robotSinkTime: 2.5,
   // Big walkers' legs and reactor as targets (Keith 2026-11-06; src/combat/robotWeakPoints.ts).
   ...WEAK_DEFAULTS,
+  // Stagger (Keith 2026-11-15; src/game/poise.ts: its sliders are in the mech's list, the Stagger topic).
+  ...POISE_DEFAULTS,
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
@@ -792,6 +795,19 @@ export class RobotSwarm {
   readonly frozen: Uint8Array;
   /** Chill (src/game/chill.ts, host): 1 at full speed, less while chilled, 0 frozen solid (no thinking, no moving, still hittable). */
   readonly pace: Float32Array;
+  /**
+   * Stagger (src/game/poise.ts, host): hurt built up lately, seconds staggered left, grace before the next, and the
+   * stagger's shove (m/s, fading). Staggered walkers don't think (no attacks start; a charge not yet released broke
+   * off) and move at staggerPace; small ones are knocked down instead.
+   */
+  readonly poiseBuild = new Float32Array(ROBOT_MAX);
+  readonly stun = new Float32Array(ROBOT_MAX);
+  readonly stunGrace = new Float32Array(ROBOT_MAX);
+  readonly shoveX = new Float32Array(ROBOT_MAX);
+  readonly shoveZ = new Float32Array(ROBOT_MAX);
+  /** Staggers started since construction. */
+  staggers = 0;
+  private readonly poiseCols: PoiseCols = { build: this.poiseBuild, stun: this.stun, grace: this.stunGrace };
   /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
   keepOut: KeepOut | null = null;
   private ko = { x: 0, z: 0 };
@@ -932,6 +948,7 @@ export class RobotSwarm {
       if (i < 0) return made;
       made.push(i);
       this.frozen[i] = 0; this.hasT[i] = 0; this.pace[i] = 1;
+      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0;
       const kind = plan[k], big = kind === BIG, mid = kind === MID;
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -1240,12 +1257,14 @@ export class RobotSwarm {
       if (this.kind[i] === BIG && this.pulseT[i] >= v.robotPulseCharge * v.robotPulseDodgeFrom && this.pulseT[i] < v.robotPulseCharge && state[i] < DEAD) rings.push(this.pax[i], this.paz[i], v.robotPulseRadius + 1.5);
     }
 
+    const fade = poiseFade(dt, v), shoveK = Math.exp(-dt * v.staggerShoveDrag);
     for (let i = 0; i < this.hi; i++) {
       const s = state[i];
       cx[i] = 0; cz[i] = 0;
       if (s === EMPTY) continue;
       if ((this.frozen[i] || this.pace[i] < 0.02) && s < DEAD) continue;
       stateTime[i] += dt;
+      if (s < DEAD) poiseTickAt(this.poiseCols, i, dt, fade, v);
       const target = this.targetOf(i, base), own = this.hasT[i] === 1, keep = target.radius + v.robotKeepOut;
       const kind = this.kind[i], big = kind === BIG, mid = kind === MID, walker = big || mid;
 
@@ -1301,6 +1320,13 @@ export class RobotSwarm {
         continue;
       }
 
+      // Staggered (src/game/poise.ts): no thinking, so no attack starts; a released beam or pulse runs its course.
+      if (this.stun[i] > 0 && walker && this.beamT[i] < 0 && this.pulseT[i] < 0) {
+        this.tell[i] = 0;
+        const k = Math.exp(-dt * 4);
+        vx[i] *= k; vz[i] *= k;
+        continue;
+      }
       const tx = target.x - px[i], tz = target.z - pz[i];
       const dist = Math.hypot(tx, tz) || 1e-6;
       const ux = tx / dist, uz = tz / dist;
@@ -1547,8 +1573,13 @@ export class RobotSwarm {
       const s = state[i];
       if (!this.grounded(s) || this.frozen[i] || this.pace[i] < 0.02) continue;
       const target = this.targetOf(i, base), keep = target.radius + v.robotKeepOut;
-      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i];
+      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i] * (this.stun[i] > 0 ? v.staggerPace : 1);
       let x = ox + vx[i] * pdt + cx[i], z = oz + vz[i] * pdt + cz[i];
+      if (this.shoveX[i] !== 0 || this.shoveZ[i] !== 0) {
+        x += this.shoveX[i] * dt; z += this.shoveZ[i] * dt;
+        this.shoveX[i] *= shoveK; this.shoveZ[i] *= shoveK;
+        if (Math.abs(this.shoveX[i]) + Math.abs(this.shoveZ[i]) < 0.05) { this.shoveX[i] = 0; this.shoveZ[i] = 0; }
+      }
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = keep + this.rad(i) * 0.5;
       if (d < m) {
         if (d > 1e-5) {
@@ -2201,8 +2232,42 @@ export class RobotSwarm {
   damage(i: number, amount: number, dirX: number, dirZ: number): boolean {
     if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
     this.hp[i] -= amount;
-    if (this.hp[i] > 0) return false;
+    if (this.hp[i] > 0) { this.poise(i, amount, dirX, dirZ); return false; }
     this.kill(i, dirX, dirZ);
+    return true;
+  }
+
+  /**
+   * Stagger build on a live robot (src/game/poise.ts): every hit's damage, and a sword's extra (Hittable.poise). Past
+   * its kind's poise a walker staggers (its unreleased charge or saw breaks off) and is shoved along (dirX, dirZ); a
+   * small one on the ground is knocked down. Returns true if it staggered.
+   */
+  poise(i: number, amount: number, dirX: number, dirZ: number): boolean {
+    if (i < 0 || i >= this.hi || !(amount > 0)) return false;
+    const s = this.state[i];
+    if (s >= DOWN || s === FLUNG || s === LEAP || s === LATCHED) return false;
+    const v = this.v, kind = this.kind[i], quad = kind === MID && this.variant[i] === QUAD_WEAPON;
+    const share = kind === SMALL ? v.poiseScrapper : kind === BIG ? v.poiseExcavator : quad ? v.poiseQuad : v.poiseCutter;
+    const t = poiseHitAt(this.poiseCols, i, amount, share * this.maxHp[i], v, kind === BIG ? v.staggerHeavyTime : 1);
+    if (t <= 0) return false;
+    this.staggers++;
+    const l = Math.hypot(dirX, dirZ), nx = l > 1e-5 ? dirX / l : 0, nz = l > 1e-5 ? dirZ / l : 0;
+    if (kind === SMALL) {
+      this.setState(i, DOWN);
+      this.fallYaw[i] = Math.atan2(nx, nz);
+      this.vx[i] = nx * v.shoveLight; this.vz[i] = nz * v.shoveLight;
+      return true;
+    }
+    const shove = kind === BIG ? v.shoveHeavy : quad ? v.shoveQuad : v.shoveCutter;
+    this.shoveX[i] = nx * shove; this.shoveZ[i] = nz * shove;
+    // Break off what hasn't gone off yet: the saw's wind-up and lunge, a charging beam, a charging pulse.
+    if (s === CUT && this.stateTime[i] < v.robotMidCutWindup + v.robotMidLungeTime) { this.setState(i, RUN); this.cutClock[i] = 0.4 + 0.4 * this.rand(); }
+    if (this.beamT[i] >= 0 && this.beamT[i] < this.beamSpec(i).charge) this.endBeam(i, this.beamSpec(i).cooldown * 0.5);
+    if (this.pulseT[i] >= 0 && this.pulseT[i] < v.robotPulseCharge) {
+      this.pulseT[i] = -1;
+      this.pulseClock[i] = v.robotPulseCooldown * 0.5 * (0.85 + 0.3 * this.rand());
+    }
+    if (s === FIRE && this.beamT[i] < 0 && this.pulseT[i] < 0) { this.setState(i, RUN); this.burstLeft[i] = 0; }
     return true;
   }
 

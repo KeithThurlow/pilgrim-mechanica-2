@@ -24,7 +24,7 @@ import { TRAMPLE_DEFAULTS, type MechBody, type TrampleValues, type GroundThreat 
 /** The swarm's outside methods that change it: recorded on the view, applied in the worker. */
 export const INFANTRY_OPS = [
   "spawn", "remove", "damage", "shove", "trample", "dodge", "stomp", "setTarget", "clearTarget",
-  "setFrozen", "sleep", "setPace", "scaleHp", "setHeading",
+  "setFrozen", "sleep", "setPace", "scaleHp", "setHeading", "poise",
 ] as const;
 
 /**

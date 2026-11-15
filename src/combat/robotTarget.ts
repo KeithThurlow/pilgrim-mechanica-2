@@ -75,6 +75,8 @@ export class RobotTarget implements Hittable, Owner {
   unitOf(key: number) { return key >> 5; }
   /** Chill (src/game/chill.ts): the robot moves at k of its speed, 0 frozen solid. */
   slow(key: number, k: number) { this.swarm.setPace(this.unitOf(key), k); }
+  /** Stagger build on the robot last hit (src/game/poise.ts; a sword's extra). */
+  poise(amount: number, dir: THREE.Vector3) { if (this.last >= 0) this.swarm.poise(this.last, amount, dir.x, dir.z); }
 
   private hp: V3 = { x: 0, y: 0, z: 0 }; private kn: V3 = { x: 0, y: 0, z: 0 };
   private tp: V3 = { x: 0, y: 0, z: 0 }; private ft: V3 = { x: 0, y: 0, z: 0 }; private lw: V3 = { x: 0, y: 0, z: 0 };

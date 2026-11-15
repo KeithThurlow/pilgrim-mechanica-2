@@ -10,6 +10,7 @@ import { steerOut, type KeepOut } from "../game/keepOut";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
+import { POISE_DEFAULTS, poiseFade, poiseHitAt, poiseTickAt, clearPoiseAt, type PoiseCols } from "../game/poise";
 import { closingSpeed, pairChance, threatOut, trampleFling, trampleHurt, type GroundThreat, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 
 export const INFANTRY_DEFAULTS = {
@@ -66,6 +67,9 @@ export const INFANTRY_DEFAULTS = {
   diveTime: 1.1,
   diveMargin: 0.8,
   evadeSpeed: 1.2,
+  // Stagger (Keith 2026-11-15; src/game/poise.ts: sliders in the mech's list, the Stagger topic). Droids read poiseDroid
+  // through droidValues (src/combat/droids.ts) as their poiseBandit.
+  ...POISE_DEFAULTS,
 };
 export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
@@ -216,6 +220,18 @@ export class InfantrySwarm {
   dives = 0;
   /** Seconds before the mech's body can hurt this one again (trample). */
   readonly trampleCd = new Float32Array(INFANTRY_MAX);
+  /**
+   * Stagger (src/game/poise.ts, host): hurt built up lately, seconds staggered left, grace before the next, and the
+   * stagger's shove (m/s, fading). A staggered one doesn't think (no shots, its burst lost) and moves at staggerPace.
+   */
+  readonly poiseBuild = new Float32Array(INFANTRY_MAX);
+  readonly stun = new Float32Array(INFANTRY_MAX);
+  readonly stunGrace = new Float32Array(INFANTRY_MAX);
+  readonly shoveX = new Float32Array(INFANTRY_MAX);
+  readonly shoveZ = new Float32Array(INFANTRY_MAX);
+  /** Staggers started since construction. */
+  staggers = 0;
+  private readonly poiseCols: PoiseCols = { build: this.poiseBuild, stun: this.stun, grace: this.stunGrace };
 
   /** The swarm's block of the ECS world (src/combat/infantryWorld.ts): the shared arrays above are views of its columns. */
   readonly block: InfantryBlock;
@@ -270,6 +286,7 @@ export class InfantrySwarm {
       this.slope[i] = 0; this.fallYaw[i] = 0;
       this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0; this.hold[i] = 0; this.hurry[i] = 0; this.pace[i] = 1;
       this.diveT[i] = 0; this.evadeT[i] = 0; this.rolledFor[i] = 0; this.trampleCd[i] = 0;
+      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
@@ -370,6 +387,7 @@ export class InfantrySwarm {
 
     const sp = v.banditSpacing, sp2 = sp * sp, gap = v.bodyGap;
     const turn = v.banditTurn * DEG * dt;
+    const fade = poiseFade(dt, v), shoveK = Math.exp(-dt * v.staggerShoveDrag);
     const steer = Math.min(1, v.banditAccel * dt);
     const spread = v.spreadDeg * DEG;
     const fleeAt = v.banditFleeAt;
@@ -395,6 +413,14 @@ export class InfantrySwarm {
         continue;
       }
 
+      poiseTickAt(this.poiseCols, i, dt, fade, v);
+      // Staggered (src/game/poise.ts): no thinking, so no shots; it slows.
+      if (this.stun[i] > 0 && s < DOWN) {
+        const k = Math.exp(-dt * 4);
+        vx[i] *= k; vz[i] *= k;
+        this.burstLeft[i] = 0;
+        continue;
+      }
       const target = this.targetOf(i, base), calm = this.calm[i] === 1;
       const keep = target.radius + v.keepOut;
       const tx = target.x - px[i], tz = target.z - pz[i];
@@ -514,8 +540,13 @@ export class InfantrySwarm {
       const s = state[i];
       if (s >= DEAD || ((this.frozen[i] || this.pace[i] < 0.02) && s < DOWN)) continue;
       const target = this.targetOf(i, base), calm = this.calm[i] === 1;
-      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i];
+      const ox = px[i], oz = pz[i], oy = py[i], pdt = dt * this.pace[i] * (this.stun[i] > 0 ? v.staggerPace : 1);
       let x = ox + vx[i] * pdt + cx[i], z = oz + vz[i] * pdt + cz[i];
+      if (this.shoveX[i] !== 0 || this.shoveZ[i] !== 0) {
+        x += this.shoveX[i] * dt; z += this.shoveZ[i] * dt;
+        this.shoveX[i] *= shoveK; this.shoveZ[i] *= shoveK;
+        if (Math.abs(this.shoveX[i]) + Math.abs(this.shoveZ[i]) < 0.05) { this.shoveX[i] = 0; this.shoveZ[i] = 0; }
+      }
       // Never inside the mech's body (keepOut is a soft steer above, so the body can reach them: trample).
       const dx = x - target.x, dz = z - target.z, d = Math.hypot(dx, dz), m = calm ? 0 : target.radius + BODY_SKIN;
       if (d < m) {
@@ -650,8 +681,21 @@ export class InfantrySwarm {
   damage(i: number, amount: number, dirX: number, dirZ: number, throwSpeed = this.v.deathThrow): boolean {
     if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
     this.hp[i] -= amount;
-    if (this.hp[i] > 0) return false;
+    if (this.hp[i] > 0) { this.poise(i, amount, dirX, dirZ); return false; }
     this.kill(i, dirX, dirZ, throwSpeed);
+    return true;
+  }
+
+  /** Stagger build on a live one standing (src/game/poise.ts): every hit's damage and a sword's extra
+   *  (Hittable.poise). Past its poise it staggers, shoved along (dirX, dirZ). Returns true if it staggered. */
+  poise(i: number, amount: number, dirX: number, dirZ: number): boolean {
+    if (i < 0 || i >= this.hi || this.state[i] >= DOWN || !(amount > 0)) return false;
+    const v = this.v;
+    if (poiseHitAt(this.poiseCols, i, amount, v.poiseBandit * v.hp, v) <= 0) return false;
+    this.staggers++;
+    const l = Math.hypot(dirX, dirZ);
+    if (l > 1e-5) { this.shoveX[i] = (dirX / l) * v.shoveLight; this.shoveZ[i] = (dirZ / l) * v.shoveLight; }
+    this.diveT[i] = 0;
     return true;
   }
 

@@ -15,9 +15,12 @@
 // pull, damage, eating); the seeker lamps' sweep is cosmetic. Randomness seeded per crusher.
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
+import { Poise, POISE_DEFAULTS } from "../game/poise";
 import { walkHip, walkHome, walkLeg, type V3, type WalkSpec } from "./robotLegs";
 
 export const CRUSHER_DEFAULTS = {
+  // Stagger (Keith 2026-11-15; src/game/poise.ts: sliders in the mech's list, the Stagger topic).
+  ...POISE_DEFAULTS,
   crusherSize: 6,
   crusherHeight: 3.2,
   crusherHull: 2200,
@@ -195,6 +198,8 @@ export class Crusher {
   private wait = new Uint8Array(LEGS);
   private suckClock: number;
   private clawClock = 0;
+  /** Stagger (src/game/poise.ts, host): staggered, it stops (a spin-up, suck or claw wind-up breaks off) and slides on its shove. */
+  readonly poise = new Poise();
   private grindAcc = 0;
   private sideClock: number;
   private side: number;
@@ -262,6 +267,16 @@ export class Crusher {
       const g = this.ground.height(this.x, this.z) + this.H * 0.3;
       this.bodyY += (g - this.bodyY) * Math.min(1, dt * 2.5);
       this.vx = this.vz = 0;
+      return;
+    }
+    this.poise.tick(dt, v);
+    if (this.poise.staggered) {
+      this.spin = Math.max(0, this.spin - dt * 0.8);
+      const k = Math.exp(-dt * v.staggerShoveDrag);
+      this.vx *= k; this.vz *= k;
+      this.x += this.vx * dt; this.z += this.vz * dt;
+      this.y = this.ground.height(this.x, this.z);
+      this.stepLegs(dt, emit);
       return;
     }
     this.suckClock -= dt; this.clawClock -= dt;
@@ -466,14 +481,28 @@ export class Crusher {
     }
   }
 
-  hit(amount: number, emit: (e: CrusherEvent) => void) {
+  hit(amount: number, emit: (e: CrusherEvent) => void, dirX = 0, dirZ = 0) {
     if (!this.alive || !(amount > 0)) return;
     this.health -= amount;
     this.hurt = Math.min(1, this.hurt + amount / 300);
     if (this.health <= 0) {
       this.health = 0; this.alive = false; this.mode = DOWNED; this.modeT = 0;
       emit({ type: "down", id: this.id, x: this.x, y: this.bodyY, z: this.z });
+      return;
     }
+    this.stagger(amount, dirX, dirZ);
+  }
+
+  /** Stagger build (src/game/poise.ts): every hit's damage and a sword's extra. Returns true if it staggered. */
+  stagger(amount: number, dirX: number, dirZ: number): boolean {
+    const v = this.v;
+    if (!this.alive || this.poise.hit(amount, v.poiseCrusher * this.maxHealth, v, v.staggerHeavyTime) <= 0) return false;
+    if (this.mode === SPIN || this.mode === SUCK) { this.suckClock = v.crusherSuckEvery * 0.5; this.grindAcc = 0; }
+    if (this.mode === CLAW) { this.clawClock = v.crusherClawEvery * 0.5; this.clawT = 0; }
+    if (this.mode !== EAT) { this.mode = WALK; this.modeT = 0; }
+    const l = Math.hypot(dirX, dirZ);
+    if (l > 1e-5) { this.vx += (dirX / l) * v.shoveHeavy; this.vz += (dirZ / l) * v.shoveHeavy; }
+    return true;
   }
 }
 
@@ -510,7 +539,7 @@ export class Crushers {
     for (const c of this.list) c.update(dt, prey, food, this.emit);
   }
 
-  hit(c: Crusher, amount: number) { c.hit(amount, this.emit); }
+  hit(c: Crusher, amount: number, dirX = 0, dirZ = 0) { c.hit(amount, this.emit, dirX, dirZ); }
 
   remove(c: Crusher) { const k = this.list.indexOf(c); if (k >= 0) this.list.splice(k, 1); }
 }
