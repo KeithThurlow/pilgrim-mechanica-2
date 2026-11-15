@@ -1,0 +1,48 @@
+{
+ "id": "gunTruck",
+ "kind": "vehicle",
+ "name": "Gun truck",
+ "maker": "War band",
+ "says": "the brawler: plough nose, slat armour, twin stacks, heavy gun ring",
+ "tris": 5480,
+ "meshes": 4,
+ "size": [
+  2.78,
+  3.111,
+  7.42
+ ],
+ "min": [
+  -1.39,
+  -0.74,
+  -3.42
+ ],
+ "max": [
+  1.39,
+  2.3707,
+  4.0002
+ ],
+ "sockets": {
+  "Turret": [
+   0.0,
+   0.72,
+   -1.51
+  ]
+ },
+ "moving": {
+  "Paint": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  },
+  "Wheel": {
+   "pivot": [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  }
+ },
+ "source": "tools/blender/parts/warband.py"
+}
