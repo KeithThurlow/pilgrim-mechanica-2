@@ -665,7 +665,7 @@ export class EnergyGuns {
           }
           // Lit up by it (the glare on the body), and set alight: metal heats and glows after the beam moves on.
           this.flare("sunder", h.x, h.y, h.z, 1.1, 0.22);
-          if (v.sunderBurn > 0 && v.sunderBurnDps > 0) bf.burns.ignite(t, h.key, v.sunderBurn, v.sunderBurnDps, h.x, h.y, h.z, d.x, d.z);
+          if (v.sunderBurn > 0 && v.sunderBurnDps > 0) bf.burns?.ignite(t, h.key, v.sunderBurn, v.sunderBurnDps, h.x, h.y, h.z, d.x, d.z);
         }
       }
       this.last.sunder = dealt;
