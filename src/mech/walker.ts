@@ -864,19 +864,26 @@ export class WalkerSim {
   }
 
   /**
-   * The run's cadence (cycles/s) and planted share now. Steps/s rise with speed (runSteps to runStepsTop) and with the
-   * climb along the line of run (runClimbSteps per degree; downhill runDescentSteps fewer), so a climb takes quicker,
-   * shorter strides (Keith 2026-10-26 21:54); the ground per stance shrinks with the stride, so the planted share is the
-   * flat's.
+   * The run's cadence (cycles/s) and planted share now. On the flat it comes from the stride (runStride at the run to
+   * runStrideTop at the legs' top, Keith 2026-11-16: set as steps per second, the stride halved when #341 halved the top
+   * speeds, under the walk's, running on the spot); steps/s rise with the climb along the line of run (runClimbSteps per
+   * degree; downhill runDescentSteps fewer), so a climb takes quicker, shorter strides (Keith 2026-10-26 21:54); the
+   * ground per stance shrinks with the stride, so the planted share is the flat's.
    */
   runCadence() {
     const v = this.v;
-    const base = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
+    const base = this.runBaseCps();
     const deg = Math.atan(this.grade) / D2R;
     const steps = Math.max(1, 2 * base + v.runClimbSteps * clamp(deg, 0, 35) - v.runDescentSteps * clamp(-deg, 0, 35));
     const cps = steps / 2;
-    const stance = v.boundStanceLen * Math.min(1, base / cps);
+    const stance = v.runStanceLen * Math.min(1, base / cps);
     return { cps, duty: clamp((stance * cps) / Math.max(1, this.speed), 0.2, 0.5) };
+  }
+
+  /** The run's cycles/s on the flat: the speed over the stride at this speed (runStride to runStrideTop). */
+  private runBaseCps() {
+    const v = this.v, share = this.speedShare();
+    return Math.max(2, this.speed) / Math.max(1, v.runStride + (v.runStrideTop - v.runStride) * share);
   }
 
   /** 0 at the run's speed, 1 at the legs' top speed (by ground speed). */
@@ -2038,9 +2045,9 @@ export class WalkerSim {
     this.running = true;
     this.speed = this.boundSpeed;
     this.vel.set(Math.sin(this.course) * this.boundSpeed, 0, Math.cos(this.course) * this.boundSpeed);
-    const cps = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
+    const cps = this.runBaseCps();
     this.cpsNow = cps;
-    const d = this.dutyNow = clamp((v.boundStanceLen * cps) / Math.max(1, this.speed), 0.2, 0.5);
+    const d = this.dutyNow = clamp((v.runStanceLen * cps) / Math.max(1, this.speed), 0.2, 0.5);
     const { O, I } = dm;
     if (O.swinging) this.plantFoot(O, O.pos.x, O.pos.z);
     this.phase = (0.05 * d - O.offset + 2) % 1;
@@ -2068,9 +2075,9 @@ export class WalkerSim {
     const v = this.v;
     this.speed = this.boundSpeed;
     this.vel.set(Math.sin(this.course) * this.boundSpeed, 0, Math.cos(this.course) * this.boundSpeed);
-    const cps = (v.runSteps + (v.runStepsTop - v.runSteps) * this.speedShare()) / 2;
+    const cps = this.runBaseCps();
     this.cpsNow = cps;
-    this.dutyNow = clamp((v.boundStanceLen * cps) / Math.max(1, this.speed), 0.2, 0.5);
+    this.dutyNow = clamp((v.runStanceLen * cps) / Math.max(1, this.speed), 0.2, 0.5);
     const d = this.dutyNow;
     const first = st.first, other = this.feet.find((f) => f !== first)!;
     // The foot still down lifts next step; the other is half a cycle on, in its swing.
