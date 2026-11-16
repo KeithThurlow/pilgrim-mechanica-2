@@ -326,6 +326,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-16 · Small swarm robots doubled in size (Keith; Claude)
+Scrapper `robotSize` 0.9 → 1.8 m (spread ±12% → ±8% so the largest, 1.94 m, stays under the smallest medium, 1.98 m), `robotSpacing` 1.5 → 2.5, trample body `SMALL_BODY` 0.6 → 1.2; hit and hard-body radii already follow size. Slider max 2 → 4. `src/combat/robots.ts`. Health and speed unchanged (open: rebalance if the bigger target is too easy).
+
 ### 2026-11-16 · Max zoom brought in, old far zoom kept as boss zoom (Keith; Claude)
 Normal max zoom 60 m at 53° (was 80 m at 55°). The old 80 m is the boss zoom: `camBoss` 1 (slider or `?set=camBoss:1`) lifts the max to `camBossDist` 80 at `camBossPitch` 55. Off by default, nothing switches it on yet (open: have boss fights set `camBoss`). Main file `src/core/isoCamera.ts`; typecheck clean.
 
