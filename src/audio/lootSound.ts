@@ -77,7 +77,12 @@ export class LootSound {
   private room: ConvolverNode | null = null;
   private curve: Float32Array<ArrayBuffer> | null = null;
   private curveDrive = -1;
-  constructor(private ctx: AudioContext, public v: LootSoundValues) {}
+  constructor(private ctx: AudioContext, public v: LootSoundValues) {
+    // The room's impulse (1.3 s of stereo noise into a convolver) built when sound starts, not on the first drop: it
+    // was a 20 ms tick in the middle of a fight (spike profile, 2026-11-16).
+    const warm = () => { if (ctx.state === "running") setTimeout(() => this.roomIn(), 250); else ctx.addEventListener("statechange", warm, { once: true }); };
+    if (typeof setTimeout !== "undefined" && typeof ctx.addEventListener === "function") warm();
+  }
 
   private get ok() { return this.ctx.state === "running" && this.v.lootVolume > 0; }
   private tierVol(tier: number) {

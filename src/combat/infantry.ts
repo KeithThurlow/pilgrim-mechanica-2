@@ -681,6 +681,8 @@ export class InfantrySwarm {
   remote: { step(dt: number, base: InfantryTarget): void; shots(): ArrayLike<number> } | null = null;
   /** Snapshots from the sim worker taken onto this view so far (src/sim/infantryRemote.ts; the drawer blends between them). */
   snapStamp = 0;
+  /** The sim worker's clock for the drawer (src/look/treeInterp.ts RemoteLink; set by the view, src/sim/infantryRemote.ts). */
+  link: import("../look/treeInterp").RemoteLink | null = null;
   /** True while a view replays commands it already handed the effects of: no deaths are raised. */
   silent = false;
 

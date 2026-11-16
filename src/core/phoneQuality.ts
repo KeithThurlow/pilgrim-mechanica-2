@@ -33,6 +33,9 @@ export const PHONE_PRESET: Record<string, number> = {
   guardHz: 30,             // guardian mechs on the screen: 120 on the PC
   guardLodHz: 30,          // and off it: 60
   radarHz: 10,             // the scope's canvas: 30
+  // Crater fitting (src/world/craters.ts), the dearest single thing in a siege's worst ticks (spike profile 2026-11-16):
+  // a volley's craters land over a few more ticks instead of in one.
+  craterTickWork: 3000,    // 12000 on the PC
 };
 
 /** The phone preset over a system's defaults, where they're declared, so values read before any panel is built (the

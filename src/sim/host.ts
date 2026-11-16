@@ -18,19 +18,26 @@ import type { EscortGroup } from "../convoy/escort";
 import type { Convoy } from "../convoy/platform";
 import { applyEscorts, convoyPoses } from "./escortsRemote";
 import { RobotsView } from "./robotsRemote";
+import { REMOTE_INTERP } from "../look/remoteInterp";
 import { InfantryView } from "./infantryRemote";
 import type { InfantrySwarm } from "../combat/infantry";
 import { DeathsView } from "./deathsRemote";
 import type { DeathPhysics } from "../physics/deaths";
 import type { RobotSwarm } from "../combat/robots";
+import type { RemoteLink } from "../look/treeInterp";
 
 export const SIM_DEFAULTS = {
   simMirrorSamples: 16,
+  simDrawMargin: REMOTE_INTERP.margin,
 };
 export type SimValues = typeof SIM_DEFAULTS;
 export const SIM_PARAMS: Param[] = [
   { key: "simMirrorSamples", label: "Ground parity points (every 4th frame)", min: 0, max: 256, step: 8, group: "Performance", tip: "Points where the sim worker's copy of the ground is checked against the main thread's every frame (0: off). Costs the main thread a few µs each" },
+  { key: "simDrawMargin", label: "Swarm draw delay margin (ticks)", min: 0, max: 2, step: 0.05, group: "Performance", tip: "Robots and bandits stepped in the sim worker are drawn this far behind the latest answer the worker has been late by lately (src/look/remoteInterp.ts). More: fewer stalls when the phone is busy, the swarm drawn a little later" },
 ];
+
+/** How far behind a swarm is drawn, and the frames it stood waiting for a late answer. */
+const drawLine = (l: RemoteLink | null) => (l?.interp ? `, drawn ${l.interp.delay.toFixed(1)} ticks back, ${l.interp.holds} stalls` : "");
 
 /** Whether this page runs the sim worker (not with ?noworker). */
 export const workerWanted = () => !new URLSearchParams(location.search).has("noworker");
@@ -60,6 +67,7 @@ export class SimHost {
   /** End of a frame: send the ground's changes and a few points to check (round fx, fz: the mech). */
   frame(fx: number, fz: number) {
     const t0 = performance.now();
+    REMOTE_INTERP.margin = this.v.simDrawMargin;
     this.flush(true);
     const id = ++this.id;
     // Don't pile checks up if the worker falls behind (the events always go: the copy needs every one).
@@ -86,8 +94,8 @@ export class SimHost {
     this.stats.applyMs = this.applyMs;
     this.applyMs = 0;
     this.send({ type: "frame", id, sample }, [sample.buffer]);
-    if (this.robotsView) this.robotsView.frameId = id + 1;
-    for (const v of this.infantryViews.values()) v.frameId = id + 1;
+    if (this.robotsView) { this.robotsView.frameId = id + 1; this.robotsView.sw.link!.sent = id; }
+    for (const v of this.infantryViews.values()) { v.frameId = id + 1; v.sw.link!.sent = id; }
     this.stats.mainMs = performance.now() - t0;
   }
 
@@ -97,7 +105,7 @@ export class SimHost {
     if (s.error) return `sim worker: ERROR ${s.error.split("\n")[0]}`;
     if (!s.ready) return "sim worker: starting";
     const parity = s.differ ? `ground mirror OFF at ${s.differ} of ${s.checked} points (worst ${s.worst.toFixed(3)} m at ${s.worstAt})` : `ground mirror ok (${s.checked} points)`;
-    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.robotsView ? ` · robots ${this.robotsView.sw.count} (${this.robotsView.stats.ms.toFixed(2)} ms there)` : ""}${[...this.infantryViews.values()].map((v) => ` · bandits ${v.sw.count} (${v.stats.ms.toFixed(2)} ms there)`).join("")}${this.deathsView ? ` · dead ${this.deathsView.stats.bodies} (${this.deathsView.stats.ms.toFixed(2)} ms there)` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
+    return `sim worker: ${s.workerMs.toFixed(2)} ms · lag ${s.lag} frame${s.lag === 1 ? "" : "s"} · ${s.events} events · ${parity} · main ${s.mainMs.toFixed(2)} ms${this.streamer ? ` · terrain: ${this.streamer.remoteStats.inflight} chunks out, copied in ${s.applyMs.toFixed(2)} ms` : ""}${this.patch ? ` · detail rows out ${this.patch.win.stats.inflight}` : ""}${this.robotsView ? ` · robots ${this.robotsView.sw.count} (${this.robotsView.stats.ms.toFixed(2)} ms there${drawLine(this.robotsView.sw.link)})` : ""}${[...this.infantryViews.values()].map((v) => ` · bandits ${v.sw.count} (${v.stats.ms.toFixed(2)} ms there)`).join("")}${this.deathsView ? ` · dead ${this.deathsView.stats.bodies} (${this.deathsView.stats.ms.toFixed(2)} ms there)` : ""}${this.escortGroup ? ` · ${s.escorts} escorts, convoy ${s.convoyDiffer ? `OFF at ${s.convoyDiffer} of ${s.convoyChecked} (worst ${s.convoyWorst.toExponential(1)})` : `ok (${s.convoyChecked})`}` : ""}`;
   }
 
   dispose() { this.worker.terminate(); }
@@ -141,6 +149,7 @@ export class SimHost {
     const R = sw.reactors;
     this.robotsView = new RobotsView(sw, this.rec, () => sw.reactors ?? R, seed);
     this.robotsView.frameId = this.id + 1;
+    sw.link = { sent: this.id, onSnap: null, interp: null };
     (this.stats as Record<string, unknown>).robots = this.robotsView.stats;
   }
   private robotsView: RobotsView | null = null;
@@ -152,6 +161,7 @@ export class SimHost {
   infantry(sw: InfantrySwarm, id: number, seed: number) {
     const v = new InfantryView(sw, id, this.rec, seed);
     v.frameId = this.id + 1;
+    sw.link = { sent: this.id, onSnap: null, interp: null };
     this.infantryViews.set(id, v);
     (this.stats as Record<string, unknown>)[`infantry${id}`] = v.stats;
   }

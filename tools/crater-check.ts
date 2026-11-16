@@ -29,8 +29,9 @@ const R2D = 180 / Math.PI;
 let seed = 12345;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 
+// (No per-tick cap unless a test asks: most tests blast many times without a tick between.)
 function world(extra: Record<string, number> = {}) {
-  const v = { ...TERRAIN_DEFAULTS, ...CRATER_DEFAULTS, ...extra };
+  const v = { ...TERRAIN_DEFAULTS, ...CRATER_DEFAULTS, craterTickWork: 0, ...extra };
   const field = new DuneField(v);
   const craters = new CraterLayer(v, field);
   field.dents = craters;
@@ -377,6 +378,27 @@ for (let i = 0; i < 200; i++) blasts.push([(rnd() - 0.5) * 60, (rnd() - 0.5) * 6
   if (worstReads > CRATER_DEFAULTS.craterStepNodes * 1.5) fail(`${worstReads} ground reads in one tick (budget ${CRATER_DEFAULTS.craterStepNodes})`);
   if (offAgain > 1e-6) fail(`a crater started over differs from fitting at once by ${offAgain} m`);
   if (rush.craters.pending) fail("a crater started over three times was not finished on the next tick");
+}
+
+// A volley in one tick (craterTickWork, 2026-11-16): past the tick's cap the later blasts wait in line and land over the
+// next ticks, at most about the cap's work a tick, and the ground ends the same as fitting every one at once.
+{
+  const cap = CRATER_DEFAULTS.craterTickWork;
+  const capped = world({ craterTickWork: cap }), free = world();
+  const shots: [number, number][] = [];
+  for (let i = 0; i < 16; i++) shots.push([600 + (i % 4) * 9 + rnd() * 2, -400 + Math.floor(i / 4) * 9 + rnd() * 2]);
+  let waited = 0;
+  for (const [x, z] of shots) { free.craters.blast(x, z, 4); capped.craters.blast(x, z, 4); if (capped.craters.stats.deferred) waited++; }
+  let ticks = 0;
+  // (Both tick alike: a tick also drops tiles whose dents are under 5 mm.)
+  while (capped.craters.pending && ticks < 200) { capped.craters.update(0); free.craters.update(0); ticks++; }
+  let off = 0;
+  for (let i = 0; i < 2000; i++) { const x = 590 + rnd() * 50, z = -410 + rnd() * 50; off = Math.max(off, Math.abs(free.field.height(x, z) - capped.field.height(x, z))); }
+  console.log(`volley: ${shots.length} blasts in one tick, ${shots.length - waited} at once and ${waited} over the next ${ticks} ticks (cap ${cap} a tick), ${off.toExponential(1)} m off fitting all at once`);
+  if (ticks > 30) fail(`a capped volley took ${ticks} ticks to land`);
+  if (!waited) fail("a volley over the tick's crater cap was all fitted at once");
+  if (capped.craters.pending) fail("a volley's queued craters never landed");
+  if (off > 1e-6) fail(`a capped volley differs from fitting at once by ${off} m`);
 }
 if (problems.length) { console.log("FAIL " + problems.join("; ")); throw new Error("crater check failed"); }
 console.log("crater check passed");
