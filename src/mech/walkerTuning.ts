@@ -17,7 +17,7 @@ export const WALKER_DEFAULTS = {
   sprintSpeed: 6.5,
   accel: 4,
   // Keith 2026-11-03: lower the hull turn (was 120, then 90); Keith 2026-11-04: still too fast, so the arms' faster tracking while sprinting shows.
-  turnRate: 50,
+  turnRate: 100, // Keith 2026-11-16 (grip): was 50, the sprint turned like a bus
   // The walk, twin-stick (Keith 2026-10-31): the body goes where the stick points, the legs follow.
   walkAccel: 30,
   walkStop: 40,
@@ -152,6 +152,8 @@ export const WALKER_DEFAULTS = {
   // run with a flight phase, handling like a vehicle; docs/proposal-bound.md). Top speed and build come from the legs.
   boundTop: 8,
   boundBuild: 0.3,
+  // Past the top (a dash's speed carried into the sprint), shed at least this (m/s²; Keith 2026-11-16, grip).
+  boundShed: 8,
   boundHop: 6,
   boundStanceLen: 4,
   boundStagger: 0.3,
@@ -163,7 +165,7 @@ export const WALKER_DEFAULTS = {
   boundCrouch: 1,
   boundSquat: 0.41,
   boundLean: 0,
-  boundGrip: 0.7,
+  boundGrip: 1.05, // Keith 2026-11-16 (grip): was 0.7
   boundYaw: 0.6,
   boundDriftMax: 22,
   boundSkid: 0.5,
@@ -399,6 +401,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "launchUpMax", label: "Fastest take-off upward (m/s)", min: 1, max: 30, step: 0.5, group: "Air", tip: "However steep the ground it leaves from, the mech never takes off upward faster than this (6 m/s rises about 1.8 m). Distance off a crest still comes from speed" },
 
   { key: "boundTop", label: "Top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 8.2, Stilt 8.5, Siege 7.8 (within 10%); 10 is very fast, 12 end game" },
+  { key: "boundShed", label: "Over top: shed (m/s²)", min: 0, max: 40, step: 0.5, group: "Sprint", tip: "Keith 2026-11-16 (grip): faster than the legs' top (the dash's burst carried into the sprint), the speed comes off at least this fast. 0 = only the build's easing (5 s of sliding from a dash)" },
   { key: "boundBuild", label: "Speed build (share/s)", min: 0.05, max: 3, step: 0.01, group: "Sprint", tip: "Each second held closes this share of the gap from the run to top speed" },
   { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 6, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },
   { key: "boundCrouch", label: "Run low (m)", min: 0, max: 2, step: 0.01, group: "Sprint", tip: "The hips run this much lower at top speed" },

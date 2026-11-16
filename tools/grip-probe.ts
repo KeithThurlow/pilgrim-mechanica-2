@@ -1,85 +1,72 @@
-// Grip probe (Keith 2026-10-31: "as the velocity of the mech reduces, the traction returns"): the lateral response (how
-// fast the motion across the stick is taken away, m/s²) against time and speed after a dash, after letting go of a
-// sprint and during the sprint. On the flat, the Rampart. Run: npx tsx tools/grip-probe.ts
-import { WalkerSim } from "../src/mech/walker";
+// Grip probe (Keith 2026-11-16: "movement can still feel a little funky... not enough grip"): numbers for how far the
+// Rampart slides when it stops, turns and lets go, walking, on the Shift run, sprinting and after a dash, on the flat.
+// Numbers only. Run: npx tsx tools/grip-probe.ts [key:value,...] (walker values overridden, e.g. boundGrip:1)
+import { WalkerSim, type MoveCommand } from "../src/mech/walker";
 import { WALKER_DEFAULTS } from "../src/mech/walkerTuning";
 import { LEG_TYPES } from "../src/mech/legTypes";
 import { Dash, DASH_DEFAULTS } from "../src/mech/dash";
 import { Bound, BOUND_DEFAULTS } from "../src/mech/bound";
 
-const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...JSON.parse((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.GRIP_SET ?? "{}") };
+const over: Record<string, number> = {};
+for (const kv of (process.argv[2] ?? "").split(",").filter(Boolean)) { const [k, x] = kv.split(":"); over[k] = Number(x); }
+const v = { ...WALKER_DEFAULTS, ...LEG_TYPES.rampart.values, ...over };
 const flat = { height: () => 0, normal: (_x: number, _z: number, o: number[] = [0, 0, 0]) => { o[0] = 0; o[1] = 1; o[2] = 0; return o; } };
 const dt = 1 / 120;
-type Cmd = { x: number; z: number; space: boolean };
 
-/** Lateral response samples: t (s from the mark), ground speed, motion across the stick, its fall rate (m/s²). */
-export function gripTrace(script: (t: number) => Cmd, mark: number, len: number) {
-  const s = new WalkerSim(v, flat as never); s.reset(0, 0, 0);
-  const d = new Dash({ ...DASH_DEFAULTS }), b = new Bound({ ...BOUND_DEFAULTS });
-  for (let i = 0; i < 240; i++) s.update(dt, { x: 0, z: 1, sprint: false });
-  const out: { t: number; speed: number; across: number; resp: number; inDash: boolean; running: boolean }[] = [];
-  let space = false, prevAcross = 0;
-  for (let t = 0; t < mark + len; t += dt) {
-    const c = script(t);
-    if (c.space && !space && d.start(0, 1)) s.dash(d.dirX, d.dirZ);
-    space = c.space;
-    b.update(dt, c.space, s, d); d.update(dt, 0);
-    s.push.set(0, 0, 0);
-    const was = s.inDash;
-    s.update(dt, { x: c.x, z: c.z, sprint: false });
-    if (was && !s.inDash && !b.on) d.cut();
-    const l = Math.hypot(c.x, c.z) || 1, mx = s.vel.x + s.skid.x, mz = s.vel.z + s.skid.z;
-    // Across the stick; with the stick off, the whole motion (the stop).
-    const across = Math.hypot(c.x, c.z) < 0.05 ? Math.hypot(mx, mz) : Math.abs((mx * -c.z + mz * c.x) / l);
-    if (t >= mark) out.push({ t: t - mark, speed: Math.hypot(mx, mz), across, resp: (prevAcross - across) / dt, inDash: s.inDash, running: s.running });
-    prevAcross = across;
+class Rig {
+  s = new WalkerSim({ ...v }, flat as never); d = new Dash({ ...DASH_DEFAULTS, ...over }); b = new Bound({ ...BOUND_DEFAULTS, ...over });
+  t = 0; slideMax = 0;
+  constructor() { this.s.reset(0, 0, 0); }
+  step(cmd: MoveCommand, space = false) {
+    this.b.update(dt, space, this.s, this.d); this.d.update(dt, 0);
+    this.s.push.set(0, 0, 0);
+    const was = this.s.dashing;
+    this.s.update(dt, cmd);
+    if (was && !this.s.dashing) this.d.cut();
+    this.t += dt;
+    for (const f of this.s.feet) this.slideMax = Math.max(this.slideMax, Math.hypot(f.slide.x, f.slide.z));
   }
-  return out;
-}
-
-function table(label: string, rows: ReturnType<typeof gripTrace>) {
-  console.log(label);
-  // Averages over 0.05 s windows, while there's motion across the stick to take away.
-  const W = Math.round(0.05 / dt);
-  const line: string[] = [];
-  for (let i = 1; i + W <= rows.length; i += W) {
-    const w = rows.slice(i, i + W);
-    if (w[0].across < 0.3) break;
-    const r = w.reduce((a, x) => a + x.resp, 0) / W;
-    line.push(`${w[0].t.toFixed(2)}s ${w[0].speed.toFixed(1)}m/s ${r.toFixed(0)}`);
+  get speed() { return Math.hypot(this.s.vel.x + this.s.skid.x, this.s.vel.z + this.s.skid.z); }
+  run(sec: number, cmd: MoveCommand, space = false) { for (let i = 0; i < sec / dt; i++) this.step(cmd, space); }
+  /** Until speed ≤ to (or max s): seconds and ground covered. */
+  until(cmd: MoveCommand, to: number, space = false, max = 6) {
+    const x0 = this.s.pos.x, z0 = this.s.pos.z, t0 = this.t; this.slideMax = 0;
+    while (this.t - t0 < max) { this.step(cmd, space); if (this.speed <= to) break; }
+    return `${(this.t - t0).toFixed(2)} s, ${Math.hypot(this.s.pos.x - x0, this.s.pos.z - z0).toFixed(1)} m, feet slide ≤${this.slideMax.toFixed(1)} m/s`;
   }
-  console.log("  " + (line.length ? line.join(" | ") : "(nothing across the stick)"));
+  sprint(sec = 3) { this.run(0.5, W); this.d.start(0, 1); this.s.dash(this.d.dirX, this.d.dirZ); this.run(sec, W, true); }
+}
+const W: MoveCommand = { x: 0, z: 1, sprint: false }, WS: MoveCommand = { ...W, sprint: true }, NONE: MoveCommand = { x: 0, z: 0, sprint: false };
+const R: MoveCommand = { x: 1, z: 0, sprint: false }, BACK: MoveCommand = { x: 0, z: -1, sprint: false };
+
+/** A turn at speed: time until the velocity points within 10° of the new way, and how far it carried on the old way. */
+function turn(r: Rig, cmd: MoveCommand, space: boolean) {
+  const z0 = r.s.pos.z, t0 = r.t; let zMax = z0; r.slideMax = 0;
+  while (r.t - t0 < 6) {
+    r.step(cmd, space);
+    zMax = Math.max(zMax, r.s.pos.z);
+    const vx = r.s.vel.x + r.s.skid.x, vz = r.s.vel.z + r.s.skid.z, sp = Math.hypot(vx, vz);
+    if (sp > 0.5 && (vx * cmd.x + vz * cmd.z) / sp > Math.cos(10 * Math.PI / 180)) break;
+  }
+  return `${(r.t - t0).toFixed(2)} s, carried on ${(zMax - z0).toFixed(1)} m, feet slide ≤${r.slideMax.toFixed(1)} m/s`;
 }
 
-const ahead: Cmd = { x: 0, z: 1, space: false }, right: Cmd = { x: 1, z: 0, space: false };
-// A tapped dash ahead; the stick turned right at the press, mid-hold, at the start of the stop, and as it ends.
-for (const at of [0.3, 0.5, 0.65]) table(`dash ahead (tap), stick right from ${at} s (t from then, speed, lateral m/s²):`,
-  gripTrace((t) => (t < 0.08 ? { ...ahead, space: true } : t < at ? ahead : right), at, 1.5));
-// A sprint: dash held 2.5 s, then let go of Space with the stick turned right at once, or held ahead 0.3 s first.
-table("sprint 2.5 s, let go with the stick right:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : right), 2.5, 2));
-table("sprint 2.5 s, let go, stick ahead 0.3 s then right:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : t < 2.8 ? ahead : right), 2.8, 2));
-table("sprint 2.5 s, let go and the stick off:", gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : { x: 0, z: 0, space: false }), 2.5, 2));
-{
-  // The run-on: let go of Space with the stick held ahead: time and ground until the walk's speed.
-  const r = gripTrace((t) => (t < 2.5 ? { ...ahead, space: true } : ahead), 2.5, 4);
-  const i = r.findIndex((x) => x.speed <= 6.05);
-  const m = r.slice(0, i < 0 ? r.length : i).reduce((a, x) => a + x.speed * dt, 0);
-  console.log(`run-on, let go with the stick ahead: from ${r[0].speed.toFixed(1)} m/s to the walk in ${i < 0 ? "never" : (i * dt).toFixed(2) + " s"}, ${m.toFixed(1)} m`);
-}
-// During the sprint: held, the stick turned right after 2 s (sideways pull = speed × the run line's turn rate).
-{
-  const s = new WalkerSim(v, flat as never); s.reset(0, 0, 0);
-  const d = new Dash({ ...DASH_DEFAULTS }), b = new Bound({ ...BOUND_DEFAULTS });
-  if (d.start(0, 1)) s.dash(0, 1);
+const rows: [string, () => string][] = [
+  ["walk, let go: stop", () => { const r = new Rig(); r.run(2, W); return `${r.speed.toFixed(1)} m/s → ` + r.until(NONE, 0.3); }],
+  ["shift run, let go: stop", () => { const r = new Rig(); r.run(2, WS); return `${r.speed.toFixed(1)} m/s → ` + r.until(NONE, 0.3); }],
+  ["shift run, off shift: to walk", () => { const r = new Rig(); r.run(2, WS); return r.until(W, v.walkSpeed + 0.2); }],
+  ["walk, 90° right", () => { const r = new Rig(); r.run(2, W); return turn(r, R, false); }],
+  ["sprint, let go all: stop", () => { const r = new Rig(); r.sprint(); return `${r.speed.toFixed(1)} m/s → ` + r.until(NONE, 0.3); }],
+  ["sprint, off space W held: walk", () => { const r = new Rig(); r.sprint(); return r.until(W, v.walkSpeed + 0.2); }],
+  ["sprint, 90° right (space held)", () => { const r = new Rig(); r.sprint(); return turn(r, R, true); }],
+  ["sprint, 90° right (space off)", () => { const r = new Rig(); r.sprint(); return turn(r, R, false); }],
+  ["sprint, reverse (space off)", () => { const r = new Rig(); r.sprint(); return turn(r, BACK, false); }],
+  ["dash tap, let go: stop", () => { const r = new Rig(); r.run(1, W); r.d.start(0, 1); r.s.dash(0, 1); r.run(0.06, W, true); return r.until(NONE, 0.3); }],
+];
+for (const [label, f] of rows) console.log(`${label.padEnd(32)} ${f()}`);
+if (process.env.TRACE) {
+  const r = new Rig(); r.run(0.5, W); r.d.start(0, 1); r.s.dash(0, 1);
   const out: string[] = [];
-  let prev = 0;
-  for (let t = 0; t < 4.5; t += dt) {
-    b.update(dt, true, s, d); d.update(dt, 0); s.push.set(0, 0, 0);
-    const c = t < 2 ? { x: 0, z: 1 } : { x: Math.sin(t * 3), z: Math.cos(t * 3) };
-    s.update(dt, { ...c, sprint: false });
-    const course = Math.atan2(s.vel.x, s.vel.z), sp = Math.hypot(s.vel.x, s.vel.z);
-    if (t > 2 && Math.round(t / dt) % 24 === 0) out.push(`${sp.toFixed(1)}m/s ${(Math.abs(((course - prev + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) / dt * sp).toFixed(1)}`);
-    prev = course;
-  }
-  console.log("during the sprint, stick circling (speed, sideways pull m/s²):\n  " + out.join(" | "));
+  for (let i = 0; i < 6 / dt; i++) { r.step(W, true); if (i % 30 === 29) out.push(`${r.t.toFixed(1)}:${r.speed.toFixed(1)}${r.s.running ? "" : "w"}`); }
+  console.log("sprint speed:", out.join(" "), "boundTop", v.boundTop);
 }
