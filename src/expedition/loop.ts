@@ -56,7 +56,8 @@ import { FieldMechs } from "./fieldMechs";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
-import { Hulks, HULK_DEFAULTS, HULK_PARAMS, HULK_GROUP, type Hulk } from "./hulks";
+import { Hulks, HULK_DEFAULTS, HULK_PARAMS, HULK_GROUP, hulkParts, type Hulk } from "./hulks";
+import { MECH_RIFF_GROUP } from "../audio/mechRiff";
 import { SalvagePanel } from "../ui/salvagePanel";
 import type { Item } from "../items/item";
 import { itemName, type Drop } from "./drops";
@@ -110,7 +111,7 @@ export const LOOP_TOPICS = [
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: waves", "Fortress: mechs", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
-  { id: "loot", label: "Loot and cargo", groups: ["Loot", HULK_GROUP, "Loot labels", "Cargo", "Item value", "Loot rolls", "Loot slot mix"] },
+  { id: "loot", label: "Loot and cargo", groups: ["Loot", MECH_RIFF_GROUP, HULK_GROUP, "Loot labels", "Cargo", "Item value", "Loot rolls", "Loot slot mix"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, ...LANCE_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts", "Robots: big weak points"] },
@@ -369,7 +370,10 @@ export class ExpeditionLoop {
     this.quests = new QuestLoop(v as never, {
       exp: this.exp, hud: this.hud, sites: this.sites, camps: this.camps, bandits: this.bandits, drops: this.loot.drops,
       dropCtx: (x, z) => this.dropCtx(x, z), depth: (x, z) => this.depth.depth(x, z),
-      hulk: (id, label, x, z, fitted, present) => { if (this.exp.state === "out" && this.hulks.add(id, label, x, z, fitted)) this.hulkBodies.set(id, present); },
+      hulk: (id, label, x, z, fitted, present) => {
+        this.loot.mechDown(x, z, hulkParts(fitted));
+        if (this.exp.state === "out" && this.hulks.add(id, label, x, z, fitted)) this.hulkBodies.set(id, present);
+      },
       hulkLeft: (id) => this.hulks.left(id),
       lead: () => { const b = convoy.bays[0]; return { x: b.x, z: b.z }; },
       blocked: (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150),
@@ -418,6 +422,7 @@ export class ExpeditionLoop {
   mechDown(id: string, label: string, x: number, z: number, fitted: readonly (Item | null)[], present: () => boolean, noteFor = 3) {
     const h = this.exp.state === "out" ? this.hulks.add(id, label, x, z, fitted) : null;
     if (h) this.hulkBodies.set(id, present);
+    this.loot.mechDown(x, z, hulkParts(fitted)); // the riff (Keith 2026-11-16)
     this.hud.note(h ? `${label} down · E by its hulk: pull its parts (${h.parts.length})` : `${label} down`, "#ffb347", noteFor);
   }
 

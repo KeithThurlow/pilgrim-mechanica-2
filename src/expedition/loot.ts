@@ -22,6 +22,8 @@ import type { Drop } from "./drops";
 import { ScrapClumps, CLUMP_DEFAULTS, CLUMP_PARAMS } from "./scrapClumps";
 import { LootHud, LOOT_HUD_DEFAULTS, LOOT_HUD_PARAMS } from "./lootHud";
 import { LootSound, LOOT_SOUND_DEFAULTS, LOOT_SOUND_PARAMS } from "../audio/lootSound";
+import { mechRiff } from "../audio/mechRiff";
+import type { Item } from "../items/item";
 import { robotThreat } from "./threat";
 
 export const FIELD_LOOT_DEFAULTS = {
@@ -64,6 +66,9 @@ export function dropHearing(v: { dropHearFull: number; dropHearMax: number }, di
   return t * t * (3 - 2 * t);
 }
 
+/** Drops landing this close to a downed mech in its frame fold into its riff (the mech's own drops land within 3 m). */
+const RIFF_FOLD = 8;
+
 export class FieldLoot {
   readonly drops: DropField;
   readonly draw: DropsDraw;
@@ -77,6 +82,8 @@ export class FieldLoot {
   private forced = 0;
   private collectors: Collector[] = [];
   private fullT = 0;
+  /** Mechs downed since the last update: their riffs wait a frame to fold in the drops that fall with them. */
+  private riffs: { x: number; z: number; tiers: number[] }[] = [];
   /** The cargo refused a drop (the glue shows a note; throttled by cargoFullNote). */
   onFull: ((text: string) => void) | null = null;
 
@@ -109,6 +116,12 @@ export class FieldLoot {
       // A weapon quad drops its weapon (Keith 2026-11-01) now and then, on top of the usual roll.
       if (sw.kind[i] === MID && sw.variant[i] === QUAD_WEAPON) this.drops.roll(`gun:${i}.${sw.gen[i]}`, sw.v.robotQuadDrop, x, z, this.at(x, z), { base: QUAD_DROP[sw.weapon[i]] });
     };
+  }
+
+  /** An enemy mech went down at (x, z) carrying these items: its riff plays next update (Keith 2026-11-16), with the
+   *  drops that land beside it this frame folded in (their own drop sounds give way to it). */
+  mechDown(x: number, z: number, items: readonly Item[]) {
+    this.riffs.push({ x, z, tiers: items.map((i) => tierOf(i.rarity)) });
   }
 
   /** A spot stripped: its scrap flies in, and it may drop an item. */
@@ -155,6 +168,8 @@ export class FieldLoot {
       }
       if (ev.type === "dropped") {
         this.draw.add(ev.drop);
+        const r = this.riffs.find((q) => Math.hypot(q.x - ev.drop.x, q.z - ev.drop.z) < RIFF_FOLD);
+        if (r) { r.tiers.push(tierOf(ev.drop.item.rarity)); continue; }
         const g = dropHearing(this.v, Math.hypot(ev.drop.x - ear.x, ev.drop.z - ear.z));
         if (g > 0) this.sound.drop(tierOf(ev.drop.item.rarity), g);
       }
@@ -165,6 +180,11 @@ export class FieldLoot {
       } else if (ev.type === "forgotten") this.draw.remove(ev.id);
     }
     this.drops.events.length = 0;
+    for (const r of this.riffs) {
+      const g = dropHearing(this.v, Math.hypot(r.x - ear.x, r.z - ear.z));
+      if (g > 0) this.sound.mechDown(mechRiff(r.tiers, this.v), g);
+    }
+    this.riffs.length = 0;
     this.clumps.update(dt, ear.x, ear.y, ear.z);
     this.draw.update(dt);
     if (f.camera && f.canvas) {

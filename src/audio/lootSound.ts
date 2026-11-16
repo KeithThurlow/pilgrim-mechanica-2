@@ -14,12 +14,14 @@
 //   with a power-chord sting on BANKED; the loss: a low detuned drone and a sludgy chord falling, and a dull thud.
 // Nothing plays until the page has been clicked or a key pressed.
 import type { Param } from "../core/tweaks";
+import { MECH_RIFF_DEFAULTS, MECH_RIFF_PARAMS, type RiffScore } from "./mechRiff";
 
 export const LOOT_SOUND_DEFAULTS = {
   lootVolume: 0.5,
   guitarDrive: 14, guitarTone: 3000, guitarRoom: 0.25,
   volCommon: 0.8, volUncommon: 0.9, volRare: 1, volEpic: 1.1, volLegendary: 1.2, volMythic: 1.3,
   clankWeight: 0.6, clankBright: 0.4, streakBuild: 8, scrapVolume: 1,
+  ...MECH_RIFF_DEFAULTS,
 };
 export type LootSoundValues = typeof LOOT_SOUND_DEFAULTS;
 export const LOOT_SOUND_PARAMS: Param[] = [
@@ -37,6 +39,7 @@ export const LOOT_SOUND_PARAMS: Param[] = [
   { key: "clankBright", label: "Scrap clank brightness", min: 0, max: 1, step: 0.05, group: "Loot", tip: "Upper metal partials and the grit on impact" },
   { key: "streakBuild", label: "Scrap streak build (clumps)", min: 1, max: 20, step: 1, group: "Loot", tip: "Clumps in a fast streak before the clanks reach full weight and density" },
   { key: "scrapVolume", label: "Scrap volume", min: 0, max: 2, step: 0.05, group: "Loot", tip: "Clanks, the slam, the bank's crates and clunk" },
+  ...MECH_RIFF_PARAMS,
 ];
 
 const at = (hz: number, st: number) => hz * Math.pow(2, st / 12);
@@ -226,6 +229,22 @@ export class LootSound {
   pickup(tier: number) {
     if (!this.ok) return;
     this.riff(tier, this.ctx.currentTime, true);
+  }
+
+  /** An enemy mech went down: its riff (src/audio/mechRiff.ts) on the drop guitar, the best item's drop as the finale. */
+  mechDown(score: RiffScore | null, gain = 1) {
+    const g = gain * this.v.riffVolume;
+    if (!score || !this.ok || g <= 0) return;
+    const t0 = this.ctx.currentTime + 0.02, a = this.amp(g * this.tierVol(score.finale.tier));
+    for (const n of score.notes) {
+      const hz = at(E2, n.semis), t = t0 + n.t;
+      if (n.voice === "mute") { this.chug(a, t, hz, n.len, 0.9); continue; }
+      const o = { t60: 1.2, damp: 0.9, bright: 0.7 };
+      this.string(a, t, hz, n.len, o, 1, 0.04);
+      if (n.voice === "fifth") this.string(a, t + 0.006, hz * FIFTH, n.len, o, 0.75, 0.04);
+      this.noise(t, 0.015, 2500, 0.2, "highpass", a.input); // the pick
+    }
+    this.riff(score.finale.tier, t0 + score.finale.t, false, g);
   }
 
   private riff(tier: number, t: number, short: boolean, gain = 1) {
