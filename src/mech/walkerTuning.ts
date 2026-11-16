@@ -221,7 +221,13 @@ export const WALKER_DEFAULTS = {
   // comes through; then a short sprint along the dash (src/mech/dashSteps.ts).
   dashLoad: 0.02,
   dashUnweight: 0.05,
-  dashDip: 0.3,
+  dashDip: 0.1,
+  // The dash crouch (Keith 2026-11-16: "crouches the mech down a little bit... as if it's having to crouch in to give
+  // itself speed"): the hips drop as the dash pushes off, stay down through the burst's hold, and come back up as it
+  // stops or as the sprint takes over. Applied with its own speed so the hip spring doesn't lag it past the dash.
+  dashCrouch: 0.3,
+  dashCrouchIn: 0.07,
+  dashCrouchOut: 0.2,
   dashPush: 0.06,
   dashOverlap: 0.01,
   dashThrough: 0.1,
@@ -446,7 +452,10 @@ export const WALKER_PARAMS: Param[] = [
   { key: "swingFoldFrom", label: "Swing squash before the thigh lifts", min: 0, max: 0.5, step: 0.01, group: "Terrain" },
   { key: "dashLoad", label: "Steps: load (s)", min: 0.02, max: 0.3, step: 0.005, group: "Dash", tip: "Both legs flex and the hips turn part way toward the dash before the push" },
   { key: "dashUnweight", label: "Steps: weight comes off first (m)", min: 0, max: 0.2, step: 0.005, group: "Dash", tip: "The hips rise this much at the very start, then drop into the crouch" },
-  { key: "dashDip", label: "Steps: crouch (m)", min: 0, max: 1, step: 0.01, group: "Dash" },
+  { key: "dashDip", label: "Steps: crouch (m)", min: 0, max: 1, step: 0.01, group: "Dash", tip: "A small extra settle in the steps' footwork, on top of the dash crouch" },
+  { key: "dashCrouch", label: "Crouch into the dash (m)", min: 0, max: 1.2, step: 0.01, group: "Dash", tip: "The hips drop this much through the dash's burst (loading into the speed), then stand back up for the walk or the sprint. 0: off" },
+  { key: "dashCrouchIn", label: "Crouch: drops in (s)", min: 0.01, max: 0.3, step: 0.005, group: "Dash", tip: "From the press to fully down" },
+  { key: "dashCrouchOut", label: "Crouch: stands back up over (s)", min: 0.03, max: 0.6, step: 0.01, group: "Dash", tip: "From the end of the burst's hold (where the sprint takes over, or the tapped dash stops)" },
   { key: "dashPush", label: "Steps: outside leg pushes for (s)", min: 0.04, max: 0.4, step: 0.005, group: "Dash", tip: "From the end of the load to the inside foot's plant" },
   { key: "dashOverlap", label: "Steps: both feet down after the inside plant (s)", min: 0, max: 0.15, step: 0.005, group: "Dash" },
   { key: "dashThrough", label: "Steps: outside leg comes through in (s)", min: 0.1, max: 0.5, step: 0.005, group: "Dash", tip: "Its plant is the first stride of the run along the dash" },

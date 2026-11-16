@@ -18,7 +18,7 @@ import { StrikesDraw } from "./strikesDraw";
 
 interface Ground { height(x: number, z: number): number }
 
-const MAX_ROCKETS = 160, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
+const MAX_ROCKETS = 160, MAX_SLUGS = 48, MAX_BEAMS = 4, MAX_RINGS = 96, MAX_LASERS = 6, MAX_COILS = 32, MAX_ARCS = 24;
 const LASER = 0xff3a2a;
 
 export class ArsenalDraw {
@@ -27,7 +27,10 @@ export class ArsenalDraw {
   private rockets: THREE.InstancedMesh;
   private flares: THREE.InstancedMesh;
   private slugs: THREE.InstancedMesh;
-  private beams: { streak: THREE.Mesh; core: THREE.Mesh; flash: THREE.Mesh; trailA: Ribbon; trailB: Ribbon; wisp: Ribbon }[] = [];
+  private beams: { streak: THREE.Mesh; core: THREE.Mesh; flash: THREE.Mesh; cone: THREE.Mesh; trailA: Ribbon; trailB: Ribbon; wisp: Ribbon }[] = [];
+  /** The rail's sonic boom: rings of shocked air thrown out round the slug's path (additive; colour is the fade). */
+  private rings: THREE.InstancedMesh;
+  private col = new THREE.Color();
   /** The rail's charge: coil glows, arcs between lit coils, the aim line on the sand and the meter at the reticle. */
   private coils: THREE.InstancedMesh;
   private arcs: THREE.InstancedMesh;
@@ -62,14 +65,23 @@ export class ArsenalDraw {
     this.strikes = new StrikesDraw(arsenal, ground);
     this.group.add(this.strikes.group);
     const unitBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5);
+    // The vapour cone: open, its tip at the origin pointing down +Z, flaring back to a unit ring at z = -1.
+    const coneGeo = new THREE.ConeGeometry(1, 1, 28, 1, true).rotateX(Math.PI / 2).translate(0, 0, -0.5);
     for (let i = 0; i < MAX_BEAMS; i++) {
       const streak = new THREE.Mesh(unitBox, glowMaterial(RAIL_GLOW, true)), core = new THREE.Mesh(unitBox, glowMaterial(0xffffff, true));
       const flash = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), glowMaterial(0xe8fbff, true));
+      const cone = new THREE.Mesh(coneGeo, glowMaterial(0xf4f8fa, false));
+      cone.frustumCulled = false; cone.renderOrder = 4; cone.visible = false;
+      this.group.add(cone);
       const trailA = new Ribbon(64, 0xa8ecff, true), trailB = new Ribbon(64, 0xa8ecff, true), wisp = new Ribbon(64, 0xcfe9f2, false);
       for (const o of [streak, core, flash]) { o.frustumCulled = false; o.renderOrder = 5; }
       this.group.add(streak, core, flash, trailA.mesh, trailB.mesh, wisp.mesh);
-      this.beams.push({ streak, core, flash, trailA, trailB, wisp });
+      this.beams.push({ streak, core, flash, cone, trailA, trailB, wisp });
     }
+    this.rings = new THREE.InstancedMesh(new THREE.RingGeometry(0.82, 1, 48), glowMaterial(0xffffff, true), MAX_RINGS);
+    this.rings.setColorAt(0, this.col.setRGB(0, 0, 0));
+    this.rings.frustumCulled = false; this.rings.count = 0; this.rings.renderOrder = 5;
+    this.group.add(this.rings);
     this.coils = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 10, 8), glowMaterial(RAIL_GLOW, true), MAX_COILS);
     this.arcs = new THREE.InstancedMesh(unitBox, glowMaterial(0xdff8ff, true), MAX_ARCS);
     for (const o of [this.coils, this.arcs]) { o.frustumCulled = false; o.count = 0; o.renderOrder = 5; this.group.add(o); }
@@ -91,6 +103,49 @@ export class ArsenalDraw {
   private paintDraw(i: number) {
     while (this.paints.length <= i) { const pd = new PainterDraw(this.ground, this.arsenal.v); this.paints.push(pd); this.group.add(pd.group); }
     return this.paints[i];
+  }
+
+  /**
+   * A rail shot's sonic boom (Keith 2026-11-16; Rail cannon boom sliders): the vapour cone flaring back round the muzzle
+   * as the slug breaks the sound barrier, and rings of shocked air thrown out round its path every few metres, each a
+   * hair later than the one behind it, so the boom reads as racing out from the gun. Returns the rings used so far.
+   */
+  private railBoom(cone: THREE.Mesh, shot: Arsenal["railShots"][number], v: Arsenal["v"], nr: number): number {
+    const f = shot.from, to = shot.to, age = shot.age;
+    this.d.set(to.x - f.x, to.y - f.y, to.z - f.z);
+    const L = this.d.length();
+    if (L < 0.1) return nr;
+    this.d.divideScalar(L);
+    this.q.setFromUnitVectors(Z, this.d);
+    const cl = Math.max(0.02, v.railConeLife);
+    if (v.railCone > 0 && age < cl) {
+      const u = age / cl, grow = 1 - (1 - u) * (1 - u);
+      const size = v.railCone * (1 + 0.9 * shot.power) * (0.55 + 0.45 * grow);
+      cone.position.set(f.x + this.d.x * size * 0.9, f.y + this.d.y * size * 0.9, f.z + this.d.z * size * 0.9);
+      cone.quaternion.copy(this.q);
+      cone.scale.set(size * 0.85, size * 0.85, size * 1.5);
+      (cone.material as THREE.MeshBasicMaterial).opacity = 0.7 * Math.pow(1 - u, 1.5);
+      cone.visible = true;
+    }
+    if (v.railRings <= 0) return nr;
+    const life = Math.max(0.03, v.railRingLife), gap = Math.max(1, v.railRingGap), path = shot.path;
+    for (let dj = 0; dj <= L && nr < MAX_RINGS; dj += gap) {
+      const a = age - dj * v.railRingSweep;
+      if (a < 0 || a >= life) continue;
+      const u = a / life, first = dj === 0;
+      const r = (0.3 + v.railRingSize * (0.6 + 0.4 * shot.power) * (first ? 1.5 : 1) * (1 - Math.pow(1 - u, 2.5)));
+      // Along the drawn path (it hugs the dunes where it flies low), not the straight chord.
+      const t = (dj / L) * (path.length - 1), k = Math.min(path.length - 2, Math.floor(t)), w = t - k;
+      const p0 = path[k], p1 = path[k + 1];
+      this.p.set(p0.x + (p1.x - p0.x) * w, p0.y + (p1.y - p0.y) * w, p0.z + (p1.z - p0.z) * w);
+      this.s.setScalar(r);
+      this.m.compose(this.p, this.q, this.s);
+      this.rings.setMatrixAt(nr, this.m);
+      const fade = v.railRings * Math.pow(1 - u, 1.6) * (first ? 1 : 0.75 * (1 - 0.5 * dj / L));
+      this.rings.setColorAt(nr, this.col.setRGB(0.75 * fade, 0.88 * fade, fade));
+      nr++;
+    }
+    return nr;
   }
 
   update(dt = 1 / 60) {
@@ -233,9 +288,10 @@ export class ArsenalDraw {
     // Rail slugs: a hard bright streak for a frame or two and a flash at the muzzle, then the ionised trail fading,
     // drifting and curling into wisps.
     const shots = a.railShots.slice(-MAX_BEAMS);
+    let nr = 0;
     this.beams.forEach((b, i) => {
       const shot = shots[i];
-      for (const o of [b.streak, b.core, b.flash, b.trailA.mesh, b.trailB.mesh, b.wisp.mesh]) o.visible = false;
+      for (const o of [b.streak, b.core, b.flash, b.cone, b.trailA.mesh, b.trailB.mesh, b.wisp.mesh]) o.visible = false;
       if (!shot || shot.path.length < 2) return;
       const f = shot.from, to = shot.to;
       const streak = Math.max(0, 1 - shot.age / Math.max(0.01, v.railStreak));
@@ -262,6 +318,7 @@ export class ArsenalDraw {
         (b.flash.material as THREE.MeshBasicMaterial).opacity = flash;
         b.flash.visible = true;
       }
+      nr = this.railBoom(b.cone, shot, v, nr);
       const T = Math.max(0.05, v.railTrail), fade = Math.max(0, 1 - shot.age / T);
       if (fade <= 0) return;
       // The trail: the path drifting up and sideways as it ages, wobbling along its length (seeded per shot).
@@ -281,6 +338,9 @@ export class ArsenalDraw {
         b.wisp.mat.opacity = Math.min(1, age * 6) * fade * 0.35;
       }
     });
+
+    this.rings.count = nr;
+    if (nr) { this.rings.instanceMatrix.needsUpdate = true; if (this.rings.instanceColor) this.rings.instanceColor.needsUpdate = true; }
 
     // Targeting lasers: a very faint line, with a glint sliding along it now and then.
     const lasers = [...a.sides.map((s) => s.laser), ...a.shoulders.map((s) => s.laser)].filter((l) => l.on);

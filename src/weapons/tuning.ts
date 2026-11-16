@@ -59,7 +59,7 @@ export const WEAPON_DEFAULTS = {
   railKnock: 9,
   railCooldown: 1.2,
   railKick: 0.45,
-  railShake: 0.6,
+  railShake: 1,
   railStreak: 0.06,
   railTrail: 0.8,
   railWisp: 1,
@@ -68,6 +68,17 @@ export const WEAPON_DEFAULTS = {
   railLightDamage: 0.67,
   railLightCharge: 0.7,
   railLightPen: 0.6,
+  // Rail cannon boom (Keith 2026-11-16: the slug is far past the speed of sound, so the shot should sound and look it)
+  railCone: 1,
+  railConeLife: 0.16,
+  railRings: 1,
+  railRingSize: 3.2,
+  railRingGap: 6,
+  railRingLife: 0.35,
+  railRingSweep: 0.0015,
+  railShimmer: 1,
+  railBoomWave: 4,
+  railBoomDust: 1,
   // Big mortar (one huge shell over the hills)
   mortarShells: 1,
   mortarRing: 1.5,
@@ -178,6 +189,7 @@ export const WEAPON_DEFAULTS = {
   shakeDecay: 9,
   // Weapon sound
   railLevel: 0.6,
+  railBoomLevel: 0.9,
   rocketLevel: 0.45,
   blastLevel: 2.0,
   blastSizeRef: 4,
@@ -213,7 +225,7 @@ export const WEAPON_DEFAULTS = {
 export type WeaponValues = typeof WEAPON_DEFAULTS;
 
 const AP = "Armour pierce", MAG = "Magazines";
-const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound", SG = "Shoulder gear";
+const P = "Painter", S = "Line mortar", SA = "Line mortar assist", R = "Rail cannon", RB = "Rail cannon boom", M = "Big mortar", RPG = "RPG rocket", SW = "Missile pod", L = "Targeting laser", A = "Autocannon", B = "Blasts", SND = "Weapon sound", SG = "Shoulder gear";
 export const WEAPON_PARAMS: Param[] = [
   { key: "paintOpacity", label: "Paint strength", min: 0, max: 1, step: 0.01, group: P },
   { key: "paintPulse", label: "Pulse speed (/s)", min: 0, max: 10, step: 0.1, group: P },
@@ -265,6 +277,16 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "railLightDamage", label: "Light rail: damage share", min: 0.1, max: 1, step: 0.01, group: R, tip: "A Light (hand) rail cannon on these sliders hits for this share" },
   { key: "railLightCharge", label: "Light rail: charge share", min: 0.1, max: 1.5, step: 0.01, group: R },
   { key: "railLightPen", label: "Light rail: penetration share", min: 0.1, max: 1.5, step: 0.01, group: R },
+  { key: "railCone", label: "Vapour cone size", min: 0, max: 3, step: 0.05, group: RB, tip: "The white cone of condensed air that flares back round the muzzle as the slug breaks the sound barrier (0: off)" },
+  { key: "railConeLife", label: "Vapour cone lasts (s)", min: 0.03, max: 0.6, step: 0.01, group: RB },
+  { key: "railRings", label: "Shock rings strength", min: 0, max: 2, step: 0.05, group: RB, tip: "Rings of shocked air thrown out round the slug's path, sweeping from the muzzle out (0: off)" },
+  { key: "railRingSize", label: "Shock rings reach (m)", min: 0.5, max: 10, step: 0.1, group: RB },
+  { key: "railRingGap", label: "Shock rings every (m)", min: 2, max: 20, step: 0.5, group: RB },
+  { key: "railRingLife", label: "Shock rings last (s)", min: 0.05, max: 1.5, step: 0.01, group: RB },
+  { key: "railRingSweep", label: "Ring sweep (s per m)", min: 0, max: 0.01, step: 0.0001, group: RB, tip: "How far behind the muzzle's ring each ring starts, per metre down the path: a small lag reads as the boom racing out" },
+  { key: "railShimmer", label: "Bent air along the path", min: 0, max: 3, step: 0.05, group: RB, tip: "Heat-shimmer puffs left along the slug's path (Blast waves › Heat shimmer draws them)" },
+  { key: "railBoomWave", label: "Muzzle blast wave (m)", min: 0, max: 15, step: 0.25, group: RB, tip: "The radius of the boom's blast wave at the muzzle at full charge (Blast waves by kind › Rail cannon boom scales it too)" },
+  { key: "railBoomDust", label: "Sand blown off the path", min: 0, max: 3, step: 0.05, group: RB, tip: "Sand thrown out sideways from under the slug where it flies low, on top of the kicked trail" },
 
   { key: "mortarShells", label: "Shells per volley", min: 1, max: 8, step: 1, group: M },
   { key: "mortarRing", label: "Ring radius (m)", min: 0.5, max: 12, step: 0.1, group: M, tip: "The shells land inside this ring round the aim point" },
@@ -364,6 +386,7 @@ export const WEAPON_PARAMS: Param[] = [
   { key: "blastShakeReach", label: "Shake reach (m)", min: 5, max: 150, step: 1, group: B, tip: "Blasts farther than this from the mech don't shake the camera" },
   { key: "shakeDecay", label: "Shake settles (/s)", min: 1, max: 30, step: 0.5, group: B },
   { key: "railLevel", label: "Rail cannon", min: 0, max: 1.5, step: 0.01, group: SND },
+  { key: "railBoomLevel", label: "Rail cannon sonic boom", min: 0, max: 1.5, step: 0.01, group: SND, tip: "The supersonic crack, the boom and the thunder rolling back off the dunes, on top of the shot" },
   { key: "rocketLevel", label: "Rocket launch", min: 0, max: 1.5, step: 0.01, group: SND },
   { key: "blastLevel", label: "Big blasts", min: 0, max: 4, step: 0.01, group: SND, tip: "Explosions are the loudest sound in the game (Keith 2026-11-02): about 7 dB over a sword hit at an RPG blast" },
   { key: "blastSizeRef", label: "Blast sound: size at full (m)", min: 0.5, max: 20, step: 0.5, group: SND, tip: "An explosion of this radius plays the blast at its own pitch and level; bigger ones deeper and louder, smaller ones higher and quieter" },
@@ -396,4 +419,4 @@ export const WEAPON_PARAMS: Param[] = [
 ];
 
 /** The topic every combat lab shows for these sliders. */
-export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, ...STRIKE_GROUPS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, LINE_AIM_GROUP, R, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };
+export const WEAPON_TOPIC = { id: "weapons", label: "Weapons", groups: [P, RPG, SW, ...STRIKE_GROUPS, SWORD_GROUP, SWORD_ARM_GROUP, SWORD_BLOCK_GROUP, SWORD_POWER_GROUP, SWORD_VERT_GROUP, SWORD_SOUND_GROUP, ...ENERGY_GROUPS, SG, M, S, SA, LINE_AIM_GROUP, R, RB, A, ...GUN_GROUPS, CANNON_GROUP, ...FIRE_GROUPS, DAMAGE_TYPE_GROUP, "Penetration", AP, "Armour", MAG, "Health bars", L, B, SND] };

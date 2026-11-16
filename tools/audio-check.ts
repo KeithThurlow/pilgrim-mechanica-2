@@ -1,6 +1,7 @@
 // Headless audio check: every generated sound is finite, under full scale, has some energy, and the growl loops
 // without a click at the seam. Run: npm test (or npx tsx tools/audio-check.ts).
 import { Synth, rng, grindRecipe } from "../src/audio/synth";
+import { robotDeathRecipe, robotBigDeathRecipe } from "../src/audio/robotDeathSounds";
 
 const S = new Synth(48000);
 const r = () => rng(42);
@@ -11,6 +12,8 @@ const sounds: Record<string, Float32Array> = {
   growl: S.growl(r(), 1, 22, 55),
   casing: S.casingTonk(r()),
   grind: grindRecipe(S, r()),
+  robotDeath: robotDeathRecipe(S, r()),
+  robotBigDeath: robotBigDeathRecipe(S, r()),
   dirt: S.mix(S.noise(r(), 0.16, 900, 0.55, 0.001), S.thump(0.12, 120, 60, 0.45), S.crackle(r(), 0.15, 0.2)),
 };
 let failed = false;
