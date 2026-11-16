@@ -185,8 +185,8 @@ export class DeathPhysics {
   /**
    * Hand a body to the physics: parts and joints in its own frame, placed at (x, y, z) facing yaw, moving with the
    * velocity it had, and thrown by a push (dirX, dirZ: the kill's flat direction; strength in m/s). up (m/s): a
-   * blast's throw upward (src/game/blastLaunch.ts), on every part about alike so the whole body leaves the ground,
-   * with blastTumble × it of extra spin.
+   * blast's throw upward (src/game/blastLaunch.ts) in place of the kill lift, on every part about alike so the whole
+   * body leaves the ground, with blastTumble × it of extra spin.
    */
   ragdoll(parts: PartSpec[], joints: JointSpec[], x: number, y: number, z: number, yaw: number,
     vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number, tip = 0, up = 0): Dead {
@@ -210,7 +210,7 @@ export class DeathPhysics {
       // tip (rad/s): the whole body starts to topple about its feet along (dirX, dirZ), a tall wreck tipping over
       // (Keith 2026-11-06): each part moves as ω × its offset from the feet, ω = tip · (up × dir).
       const l = Math.hypot(dirX, dirZ) || 1, tx = tip * dirX / l, tz = tip * dirZ / l;
-      pend.lin.push({ x: vel.x + dirX * push * tall + tx * at.y, y: vel.y + push * v.deathLift * tall - (tx * at.x + tz * at.z) + up * (0.85 + 0.15 * tall), z: vel.z + dirZ * push * tall + tz * at.y });
+      pend.lin.push({ x: vel.x + dirX * push * tall + tx * at.y, y: vel.y + (up > 0 ? up * (0.85 + 0.15 * tall) : push * v.deathLift * tall) - (tx * at.x + tz * at.z), z: vel.z + dirZ * push * tall + tz * at.y });
       pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4 + tz + bz * roll, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 - tx - bx * roll });
     });
     d.pending = pend;
