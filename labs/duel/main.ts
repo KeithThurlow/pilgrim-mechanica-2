@@ -31,6 +31,10 @@ import { applyFitSpec, describeLoadout, kitOf, loadoutDps, loadoutLevel, preferr
 import { ThreatIds, duelView, threatsFrom } from "../../src/combat/duelThreats";
 import { DuelScore, type Side } from "../../src/combat/duelScore";
 import { LOOT_DEFAULTS, LOOT_PARAMS } from "../../src/items/generate";
+import { LootSound, LOOT_SOUND_DEFAULTS, LOOT_SOUND_PARAMS } from "../../src/audio/lootSound";
+import { mechRiff, MECH_RIFF_GROUP } from "../../src/audio/mechRiff";
+import { hulkParts } from "../../src/expedition/hulks";
+import { tierOf } from "../../src/items/rarity";
 import { resolve, LOADOUT_DEFAULTS, type Loadout } from "../../src/items/loadout";
 import { ROWS, choose, cleanPick, loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPick";
 import { loadBay } from "../../src/ui/bay";
@@ -63,11 +67,12 @@ let wrecks: WreckStandIns | null = null;
 const lab = await combatLab({
   id: "duel-lab",
   title: "Duel",
-  defaults: { ...DUEL_GROUND_DEFAULTS, ...RIVAL_AI_DEFAULTS, ...DUEL_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS },
-  params: [...RIVAL_AI_PARAMS, ...DUEL_PARAMS, ...DUEL_GROUND_PARAMS, ...LOOT_PARAMS],
+  defaults: { ...DUEL_GROUND_DEFAULTS, ...RIVAL_AI_DEFAULTS, ...DUEL_DEFAULTS, ...LOOT_DEFAULTS, ...LOADOUT_DEFAULTS, ...LOOT_SOUND_DEFAULTS },
+  params: [...RIVAL_AI_PARAMS, ...DUEL_PARAMS, ...DUEL_GROUND_PARAMS, ...LOOT_PARAMS, ...LOOT_SOUND_PARAMS],
   topics: [
     { id: "rival", label: "Rival", groups: ["Rival AI", "Rival", "Loot rolls"] },
     { id: "arena", label: "Arena", groups: ["Duel arena"] },
+    { id: "riff", label: "Mech down riff", groups: [MECH_RIFF_GROUP, "Loot"] },
   ],
   selectables: [
     { topic: "rival", label: "Rival", objects: () => { if (!rivalBody) return []; const r = rivalBody.regions(); return [...r.legs, ...r.hull, ...r.gunLeft, ...r.gunRight, ...(rivalArsenal?.meshes() ?? [])]; } },
@@ -89,6 +94,8 @@ const lab = await combatLab({
   },
 });
 const { V, bf, player, app, field, toon } = lab;
+/** The item-drop guitar: the rival's riff when it goes down (Keith 2026-11-16). */
+const lootSound = new LootSound(bf.sfx.ctx, V);
 const params = app.params;
 
 // ---- The rival: its own tuning values (its parts change them), body, weapons and brain ----
@@ -349,6 +356,7 @@ lab.onFrame((dt: number) => {
   if (roundOver < 0 && (!rival.alive || !player.alive)) {
     roundOver = clock;
     score.end(clock, rival.alive ? "rival" : "player");
+    if (!rival.alive && rivalLo) lootSound.mechDown(mechRiff(hulkParts(Object.values(rivalLo)).map((i) => tierOf(i.rarity)), V));
   }
   if (roundOver >= 0 && V.duelAutoRestart > 0 && clock - roundOver > V.duelAutoRestart) startRound();
 

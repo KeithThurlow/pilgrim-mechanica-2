@@ -184,7 +184,8 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     if (under) problems.push(`${under} foot-frames under the sand sprinting`);
     if (nan) problems.push(`${nan} non-finite frames sprinting`);
     if (over > 0.03) problems.push(`legs out of reach ${(over * 100).toFixed(1)}% of leg-frames sprinting`);
-    if (s.steps < 120) problems.push(`only ${s.steps} footfalls in a minute`);
+    // Still stepping (not stuck in the air or frozen): about 1.8 steps/s since the run went to long strides (Keith 2026-11-16).
+    if (s.steps < 90) problems.push(`only ${s.steps} footfalls in a minute`);
     console.log(`  dunes 60 s: ${s.steps} footfalls · in the air ${((100 * air) / (60 * 120)).toFixed(0)}% · longest flight ${longest.toFixed(2)} s · hardest landing ${worst.toFixed(1)} m/s (${hurt.toFixed(0)} damage) · reach misses ${(over * 100).toFixed(2)}% · feet under ${under} · NaN ${nan}`);
   }
   // The run's cadence (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the same
