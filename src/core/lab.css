@@ -103,6 +103,16 @@ html.touch .panel-body { display: block; }
 html.touch .panel-head button { display: none; }
 html.touch .report-btn, html.touch .help, html.touch .mech-doll, html.touch .bay-open-btn { display: none !important; }
 html.touch .exp-hud { left: calc(56px + env(safe-area-inset-left, 0px)) !important; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto !important; align-items: flex-start !important; }
+/* The threat gauge (top centre, src/expedition/expeditionHud.ts) inside the safe area; in portrait it shrinks and the
+   radar drops below it so the two don't cross. */
+html.touch .exp-top { top: calc(8px + env(safe-area-inset-top, 0px)) !important; }
+@media (orientation: portrait) {
+  html.touch .exp-threat { width: 200px !important; padding: 5px 9px 6px !important; }
+  html.touch .exp-threat-n { font-size: 22px !important; }
+  html.touch .exp-threat-t { font-size: 11px !important; }
+  html.touch .exp-threat-s { font-size: 10px !important; }
+  html.touch .exp-hud { top: calc(84px + env(safe-area-inset-top, 0px)); }
+}
 html.touch .left-stack { left: calc(14px + env(safe-area-inset-left, 0px)) !important; }
 html.touch:not(.tp-info) .exp-card { display: none; }
 html.touch:not(.tp-fps) .hud { display: none; }

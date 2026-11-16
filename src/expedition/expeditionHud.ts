@@ -2,7 +2,8 @@
 // out m:ss), "Home m:ss" (the predicted return time) and "Fuel m:ss" with a bar (amber, then red, when fuel isn't
 // comfortably above the way home), the at-risk list in amber while out (a lock once banked), the convoy's scrap, and
 // the recall prompt with its hold bar. Top centre: the salvage prompt and the big notes (banked, recovered, lost).
-// A full-screen fade for the recovery. Above the radar, the threat gauge (Keith 2026-11-16): the run's threat level,
+// A full-screen fade for the recovery. Top centre, above the prompts, the threat gauge (Keith 2026-11-16: "top and
+// middle of the screen to really show the player what's going on"): the run's threat level,
 // a bar for the way to the next level, whether it is rising, slowed (heading home), holding or falling (in convoy
 // range), and how far convoy range is; it flashes when the level goes up.
 import type { Expedition } from "./expedition";
@@ -58,7 +59,6 @@ export interface HudFrame {
 export class ExpeditionHud {
   readonly root = document.createElement("div");
   private col = document.createElement("div");
-  private stack = document.createElement("div");
   private gauge = document.createElement("div");
   private gaugeLevel = 0;
   private gaugeFlash = 0;
@@ -89,15 +89,7 @@ export class ExpeditionHud {
     // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
     this.col.className = "exp-card"; // phones: hidden unless the touch menu's Info is on (lab.css)
     this.col.append(this.questSlot, this.info, this.lootSlot);
-    // The threat gauge sits on the radar, outside the info card so phones show it too.
-    Object.assign(this.stack.style, { display: "flex", flexDirection: "column", gap: "6px", alignItems: "stretch" } as CSSStyleDeclaration);
-    Object.assign(this.gauge.style, {
-      background: "rgba(10, 14, 14, 0.72)", padding: "6px 9px 7px", borderRadius: "6px", minWidth: "150px", display: "none",
-      fontVariantNumeric: "tabular-nums", transition: "box-shadow 0.25s",
-    } as CSSStyleDeclaration);
-    this.gauge.className = "exp-threat";
-    this.stack.append(this.gauge, radar);
-    this.root.append(this.stack, this.col);
+    this.root.append(radar, this.col);
     document.body.appendChild(this.root);
 
     Object.assign(this.top.style, {
@@ -105,7 +97,15 @@ export class ExpeditionHud {
       font: "600 15px/1.3 system-ui, 'Segoe UI', sans-serif", color: "#f3e6cc", textShadow: "0 1px 3px #000c", zIndex: "5",
     } as CSSStyleDeclaration);
     Object.assign(this.noteEl.style, { font: "700 24px/1.2 system-ui, 'Segoe UI', sans-serif", opacity: "0", marginTop: "4px" });
-    this.top.append(this.promptEl, this.noteEl);
+    // The threat gauge heads the top centre stack, the salvage prompt and notes under it (phones: lab.css).
+    Object.assign(this.gauge.style, {
+      background: "rgba(10, 14, 14, 0.74)", padding: "7px 12px 8px", borderRadius: "7px", width: "300px", maxWidth: "calc(100vw - 24px)",
+      boxSizing: "border-box", margin: "0 auto 6px", display: "none", textAlign: "left", fontVariantNumeric: "tabular-nums",
+      transition: "box-shadow 0.25s",
+    } as CSSStyleDeclaration);
+    this.gauge.className = "exp-threat";
+    this.top.className = "exp-top";
+    this.top.append(this.gauge, this.promptEl, this.noteEl);
     document.body.appendChild(this.top);
 
     Object.assign(this.fadeEl.style, {
@@ -139,13 +139,13 @@ export class ExpeditionHud {
       : surging ? `deeper than ever · convoy range ${range}`
       : `falls only in convoy range · ${range}`;
     const fl = this.gaugeFlash, k = Math.round(Math.max(0, Math.min(1, t.share)) * 100);
-    g.style.boxShadow = fl > 0 ? `0 0 ${Math.round(18 * Math.min(1, fl))}px ${col}, inset 0 0 0 1px ${col}` : `inset 3px 0 0 ${col}`;
-    g.innerHTML = `<div style="display:flex;align-items:baseline;gap:8px">`
-      + `<span style="font-size:11px;letter-spacing:0.12em;color:${COL.dim}">THREAT</span>`
-      + `<span style="font:800 ${fl > 0 ? 26 : 22}px/1 system-ui, 'Segoe UI', sans-serif;color:${col}">${lv}</span>`
-      + `<span style="margin-left:auto;font-size:11px;letter-spacing:0.08em;color:${trendCol};opacity:${pulse.toFixed(2)}">${trend}</span></div>`
-      + `<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:4px 0 3px"><div style="height:100%;width:${k}%;background:${col};border-radius:3px"></div></div>`
-      + `<div style="font-size:10px;color:${COL.dim}">${sub}</div>`;
+    g.style.boxShadow = fl > 0 ? `0 0 ${Math.round(24 * Math.min(1, fl))}px ${col}, inset 0 0 0 1px ${col}` : `inset 0 -2px 0 ${col}55`;
+    g.innerHTML = `<div style="display:flex;align-items:baseline;gap:9px">`
+      + `<span class="exp-threat-k" style="font-size:12px;letter-spacing:0.14em;color:${COL.dim}">THREAT</span>`
+      + `<span class="exp-threat-n" style="font:800 ${fl > 0 ? 34 : 28}px/1 system-ui, 'Segoe UI', sans-serif;color:${col}">${lv}</span>`
+      + `<span class="exp-threat-t" style="margin-left:auto;font-size:13px;letter-spacing:0.08em;color:${trendCol};opacity:${pulse.toFixed(2)}">${trend}</span></div>`
+      + `<div style="height:7px;background:#ffffff1c;border-radius:4px;margin:5px 0 4px"><div style="height:100%;width:${k}%;background:${col};border-radius:4px"></div></div>`
+      + `<div class="exp-threat-s" style="font-size:11px;color:${COL.dim}">${sub}</div>`;
   }
 
   /** A big note top centre for a few seconds (a raid coming). */

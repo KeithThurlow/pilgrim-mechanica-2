@@ -8,7 +8,7 @@ export class AirliftHud {
 
   constructor() {
     Object.assign(this.el.style, {
-      position: "fixed", top: "86px", left: "50%", transform: "translateX(-50%)", textAlign: "center", pointerEvents: "none",
+      position: "fixed", top: "140px", left: "50%", transform: "translateX(-50%)", textAlign: "center", pointerEvents: "none",
       font: "600 15px/1.35 system-ui, 'Segoe UI', sans-serif", color: "#8fd0ff", textShadow: "0 1px 3px #000c", zIndex: "5",
       fontVariantNumeric: "tabular-nums",
     } as CSSStyleDeclaration);
