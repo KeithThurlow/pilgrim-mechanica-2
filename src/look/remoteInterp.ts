@@ -31,7 +31,7 @@ export const REMOTE_INTERP = {
   /** The least delay (ticks). */
   minDelay: 0.5,
   /** The most delay (ticks). */
-  maxDelay: 3,
+  maxDelay: 4,
   /** How fast the delay rises to a later answer, and eases back (ticks a second). */
   rise: 14,
   fall: 0.4,
@@ -104,6 +104,8 @@ export class RemoteInterp {
     const oldest = this.at(this.n - 1).id;
     if (t >= newest.id) { if (t > newest.id + 1e-6) this.holds++; t = newest.id; }
     if (t < oldest) t = oldest;
+    // Never back in time: after a hold the delay has grown, and the clock waits for the time drawn to catch up.
+    if (t < this.drawnAt && this.drawnAt <= newest.id) t = Math.max(oldest, this.drawnAt);
     this.drawnAt = t;
     if (this.n < 2 || t >= newest.id) return; // the arrays already hold the newest
     let b = 0;
