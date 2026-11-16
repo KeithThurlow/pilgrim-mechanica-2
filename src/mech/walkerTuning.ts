@@ -150,7 +150,7 @@ export const WALKER_DEFAULTS = {
   launchUpMax: 6,
   // Sprint (Keith 2026-10-26: hold Space after the dash and the mech runs on, faster and faster, a real digitigrade
   // run with a flight phase, handling like a vehicle; docs/proposal-bound.md). Top speed and build come from the legs.
-  boundTop: 8,
+  boundTop: 11, // Keith 2026-11-16 (his walker-lab values; was 8)
   boundBuild: 0.3,
   // Past the top (a dash's speed carried into the sprint), shed at least this (m/s²; Keith 2026-11-16, grip).
   boundShed: 8,
@@ -165,8 +165,8 @@ export const WALKER_DEFAULTS = {
   boundCrouch: 1,
   boundSquat: 0.41,
   boundLean: 0,
-  boundGrip: 1.05, // Keith 2026-11-16 (grip): was 0.7
-  boundYaw: 0.6,
+  boundGrip: 1.1, // Keith 2026-11-16 (grip): was 0.7, then 1.05; 1.1 from his walker-lab values
+  boundYaw: 0.15, // Keith 2026-11-16 (his walker-lab values; was 0.6)
   boundDriftMax: 22,
   boundSkid: 0.5,
   boundAbsorb: 7,
@@ -183,7 +183,7 @@ export const WALKER_DEFAULTS = {
   // walk's 6.2. 9.5 m looked slow for the speed (Keith 2026-11-16 later): 7.5 m, about 2.2 steps/s at 8.2 m/s, a short
   // flight each step, the trailing foot pushing off 2 m behind the hips.
   runStride: 6.5,
-  runStrideTop: 7.5,
+  runStrideTop: 12.1, // Keith 2026-11-16 (his walker-lab values, with an 11 m/s top: about 1.1 s a cycle at every speed)
   runStanceLen: 3.2,
   runPlant: 1,
   runBlend: 0.6,
@@ -193,7 +193,7 @@ export const WALKER_DEFAULTS = {
   runShinBack: 100,
   runHockFold: 45,
   runTuckAt: 0.5,
-  runFollow: 0.45,
+  runFollow: 1.2, // Keith 2026-11-16 (his walker-lab values; was 0.45): the foot carries on back and up after the push-off
   runPaw: 0.8,
   runFootDrop: 55,
   runToeCurl: 100,
@@ -230,7 +230,7 @@ export const WALKER_DEFAULTS = {
   // The dash crouch (Keith 2026-11-16: "crouches the mech down a little bit... as if it's having to crouch in to give
   // itself speed"): the hips drop as the dash pushes off, stay down through the burst's hold, and come back up as it
   // stops or as the sprint takes over. Applied with its own speed so the hip spring doesn't lag it past the dash.
-  dashCrouch: 0.3,
+  dashCrouch: 0.3, // 2026-11-16: the mech labs ran 1.2 (the dash's old key set it): hips down to 1.5 m, the splits
   dashCrouchIn: 0.07,
   dashCrouchOut: 0.2,
   dashPush: 0.06,
@@ -411,7 +411,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "wallScrub", label: "Wall scrub rate (1/s)", min: 1, max: 60, step: 1, group: "Air" },
   { key: "launchUpMax", label: "Fastest take-off upward (m/s)", min: 1, max: 30, step: 0.5, group: "Air", tip: "However steep the ground it leaves from, the mech never takes off upward faster than this (6 m/s rises about 1.8 m). Distance off a crest still comes from speed" },
 
-  { key: "boundTop", label: "Sprint top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 8.2, Stilt 8.5, Siege 7.8 (within 10%); 10 is very fast, 12 end game" },
+  { key: "boundTop", label: "Sprint top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 11, Stilt 11.4, Siege 10.5 (Keith 2026-11-16). The stride is in metres (Run: stride sliders), so a faster top quickens the steps" },
   { key: "boundShed", label: "Over top: shed (m/s²)", min: 0, max: 40, step: 0.5, group: "Sprint", tip: "Keith 2026-11-16 (grip): faster than the legs' top (the dash's burst carried into the sprint), the speed comes off at least this fast. 0 = only the build's easing (5 s of sliding from a dash)" },
   { key: "boundBuild", label: "Speed build (share/s)", min: 0.05, max: 3, step: 0.01, group: "Sprint", tip: "Each second held closes this share of the gap from the run to top speed" },
   { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 6, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },

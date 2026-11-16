@@ -220,7 +220,8 @@ for (const leg of ["rampart", "rampart-stilt"] as const) {
     // cadence leaves room for one.
     const { duty } = sim.runCadence();
     if (both === 0 && duty < 0.48) problems.push(`run at ${label}: no flight phase (planted share ${duty.toFixed(2)})`);
-    if (longest > 0.22) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
+    // Keith 2026-11-16: long strides at 11 m/s (12 m a cycle) fly about 0.27 s a step; still a run, not bounds.
+    if (longest > 0.32) problems.push(`run at ${label}: flights up to ${longest.toFixed(2)} s (not short)`);
     // The bob is a slider (runBob, the amplitude; Keith 2026-10-26 set 0.175 for a bouncier run, was 0.05 under a fixed
     // 0.3 m limit), plus the plant's drop and the push-off's rise (runPlantDrop, runPushRise): no more than those plus a little.
     const bobMax = 2 * values.runBob + values.runPlantDrop + values.runPushRise + 0.08;
