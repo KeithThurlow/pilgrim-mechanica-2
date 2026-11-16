@@ -6,6 +6,7 @@ import type * as THREE from "three/webgpu";
 import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 import { sampleBank, sampleBankOf } from "../audio/sampleBank";
+import { addRobotDeathSounds } from "../audio/robotDeathSounds";
 
 export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "swordRing" | "bulletMetal" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
@@ -192,6 +193,8 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   sfx.addSound("breach", variants(3, 66, (r) => S.mix(S.tick(r, 0.03, 0.9), S.noise(r, 0.12, 3000, 0.75, 0.0003), S.thump(0.6, 95, 30, 1.3), S.lowPass(S.noise(r, 0.4, 900, 0.8, 0.002), 1200),
     S.delay(S.lowPass(S.noise(r, 1.8, 380, 0.55, 0.02), 520), 0.06))), () => v.breachLevel);
   sfx.addSound("cannon", variants(3, 46, (r) => S.mix(S.thump(0.16, 210, 70, 0.9), S.noise(r, 0.14, 2400, 0.6, 0.0006), S.tick(r, 0.03, 0.4))), () => v.cannonLevel);
+  // Robots dying (Keith 2026-11-16): an electrical short, steel crunching, drives whining down.
+  addRobotDeathSounds(sfx, () => (v as unknown as { robotSoundLevel?: number }).robotSoundLevel ?? 2);
   // The recorded sounds (Keith 2026-11-02, src/audio/samples.ts) swap in over these as they load, each behind its sliders.
   sampleBank(sfx, v as unknown as Record<string, number>);
 }
