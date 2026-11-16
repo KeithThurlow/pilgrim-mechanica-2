@@ -20,7 +20,7 @@ export function strides(leg: string, sprint: boolean, secs = 6, from = 3) {
   for (let i = 0; i < 120; i++) s.update(dt, cmd);
   if (sprint) { d.start(0, 1); s.dash(d.dirX, d.dirZ); }
   const was = s.feet.map(() => false), plantAt = s.feet.map(() => NaN), plantPos = s.feet.map(() => NaN);
-  const rows: { plant: number; lift: number; stride: number; stanceRun: number; slip?: number }[] = [];
+  const rows: { plant: number; lift: number; stride: number; stanceRun: number; slip: number }[] = [];
   let t = 0, maxBack = 0, maxFwd = 0, speed = 0, n = 0;
   while (t < secs) {
     if (sprint) { b.update(dt, true, s, d); d.update(dt, 0); }
@@ -38,7 +38,7 @@ export function strides(leg: string, sprint: boolean, secs = 6, from = 3) {
     if (t > from) { speed += s.speed; n++; }
   }
   const avg = (k: keyof (typeof rows)[0]) => rows.filter((r) => Number.isFinite(r[k])).reduce((a, r, _, A) => a + r[k] / A.length, 0);
-  return { speed: speed / n, plant: avg("plant"), lift: avg("lift"), stride: avg("stride"), stanceRun: avg("stanceRun"), slip: avg("slip" as never), maxBack, maxFwd, steps: rows.length, overreach: s.stats.overreach, cps: (s as unknown as { cpsNow: number }).cpsNow, duty: (s as unknown as { dutyNow: number }).dutyNow };
+  return { speed: speed / n, plant: avg("plant"), lift: avg("lift"), stride: avg("stride"), stanceRun: avg("stanceRun"), slip: avg("slip"), maxBack, maxFwd, steps: rows.length, overreach: s.stats.overreach, cps: (s as unknown as { cpsNow: number }).cpsNow, duty: (s as unknown as { dutyNow: number }).dutyNow };
 }
 
 if (process.argv[1]?.endsWith("stride-probe.ts")) {
