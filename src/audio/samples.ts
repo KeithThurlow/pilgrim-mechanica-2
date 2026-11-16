@@ -49,10 +49,7 @@ export const SAMPLES: SampleDef[] = [
     alien: { ring: 0, ringMix: 0, comb: 4, combFb: 0.55, sweepFrom: 180, sweepTo: 2400, sweepQ: 8, sweepMix: 0.6 } },
   { id: "RobotBeam", file: "robotalienbeam", sound: "robotBeam", ref: "blast", level: "robotSoundLevel", label: "Robot beam release (robotalienbeam)", start: 0, len: 1.6, fade: 0.9, pitch: 0, spread: 1.5, lowpass: 20000, highpass: 30, gain: -3, under: 0,
     alien: { ring: 110, ringMix: 0.4, comb: 3, combFb: 0.6, sweepFrom: 300, sweepTo: 3000, sweepQ: 5, sweepMix: 0.35 } },
-  { id: "RobotDeath", file: "robotalienexplosion", sound: "robotDeath", ref: "blast", level: "robotSoundLevel", label: "Robot death (robotalienexplosion)", start: 0, len: 2.2, fade: 1.2, pitch: -3, spread: 2, lowpass: 20000, highpass: 30, gain: -2, under: 0,
-    alien: { ring: 70, ringMix: 0.35, comb: 6, combFb: 0.6, sweepFrom: 2000, sweepTo: 200, sweepQ: 6, sweepMix: 0.4 } },
-  { id: "RobotBigDeath", file: "largerrobotalienexplosion", sound: "robotBigDeath", ref: "blast", level: "robotSoundLevel", label: "Big robot death (largerrobotalienexplosion)", start: 0, len: 3.0, fade: 1.6, pitch: -5, spread: 1.5, lowpass: 20000, highpass: 25, gain: 0, under: 0,
-    alien: { ring: 45, ringMix: 0.3, comb: 9, combFb: 0.65, sweepFrom: 1500, sweepTo: 120, sweepQ: 6, sweepMix: 0.4 } },
+  // The robot deaths are procedural now (Keith 2026-11-16: the underwater explosions didn't fit; src/audio/robotDeathSounds.ts).
   // The sword (Keith 2026-11-05). The swipe is a turbine blade's sweep: its one big pass, raised well above its match to
   // the faint procedural whoosh so it's heard, and each sword's pitch goes on top (Sword sound: buster lowest, short highest). The scrape is the loudest half second of a recording he marked too long.
   { id: "SwordSwing", file: "bladeswipe", sound: "swordSwing", label: "Sword swipe (bladeswipe)", variants: 5, start: 0.05, len: 0.75, fade: 0.3, pitch: 0, spread: 2.5, lowpass: 20000, highpass: 60, gain: 12, under: 0 },
@@ -94,9 +91,9 @@ const params: Param[] = [
   { key: "samplesOn", label: "Recorded sounds on", min: 0, max: 1, step: 1, group: SAMPLE_GROUP, tip: "0: every sound procedural, as before the Pixabay sounds" },
   { key: "sampleBlastFrom", label: "Blasts this big use the recording (m)", min: 0, max: 20, step: 0.5, group: SAMPLE_GROUP, tip: "Smaller blasts (swarm missiles 2.2 m) keep the procedural blast; RPG 4.5, pod 3, cannon shell 4, salvo 5.5" },
   { key: "sampleGiantFrom", label: "Giant blast from (m)", min: 0, max: 30, step: 0.5, group: SAMPLE_GROUP, tip: "Blasts this big play the giant recording (the big mortar is 14 m)" },
-  { key: "robotSoundLevel", label: "Robot beams and deaths level", min: 0, max: 4, step: 0.01, group: SAMPLE_GROUP, tip: "The robots' recorded beam release and deaths (as loud as Big blasts at the same value)" },
+  { key: "robotSoundLevel", label: "Robot beams and deaths level", min: 0, max: 4, step: 0.01, group: SAMPLE_GROUP, tip: "The robots' recorded beam release and their (procedural) deaths" },
   { key: "robotChargeLevel", label: "Robot beam charge level", min: 0, max: 2, step: 0.01, group: SAMPLE_GROUP },
-  { key: "robotSmallDeath", label: "Small robot death share", min: 0, max: 1, step: 0.01, group: SAMPLE_GROUP, tip: "Scrappers die by the dozen: their death is the robot death this loud, higher and shorter (0: silent)" },
+  { key: "robotSmallDeath", label: "Small robot death share", min: 0, max: 1, step: 0.01, group: SAMPLE_GROUP, tip: "Scrappers die by the dozen: their death is the walker's death this loud, higher and shorter (0: silent)" },
 ];
 for (const d of SAMPLES) {
   const g = sampleGroup(d);
