@@ -326,6 +326,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-16 · Bay save survives closing the browser (Keith; Claude)
+The bay (equipped loadout, stash, bank) is now also saved when the page is hidden or closing (`visibilitychange`, `pagehide`, `beforeunload`; Safari skips beforeunload): `saveOnLeave` in `src/ui/bay.ts`, used by `labs/convoy/main.ts`. A saved bay that exists but won't read back is copied to `<key>:unreadable` before a fresh bay replaces it. Cause not reproduced (the JSON round trip of rolled gear is lossless); this is the safety net. Open for Keith: if equipped gear still resets on the Mac, check `npm run play` opens the same origin (port) each time, since localStorage is per origin. Checked: npm check, npm test 115/115.
+
 ### 2026-11-15 · Sunder beam and arc caster impact: light, flashes, scorch, crackle (Keith; Claude)
 Sunder: soft additive light pools on the sand where it lands, along its lane and under each body it burns, a glare on those bodies, a gold burst where it first lands, more sparks, a dragged scorch, and what it touches burns on (1.5 s, 15 dps; metal heats and glows). Arc: wider bolt glow lighting the sand, a flash on each body struck, charge crackling over each one for 1.2 s, following it. No real lights (mobile). Sliders in Weapons › Sunder beam and Arc caster. `src/weapons/energy/energyGuns.ts` (flares, shocks), `energyDraw.ts`, `energyTuning.ts`. Checked: `npm test` 114/114 (energy-check: shocks one per body, follow, expire; flares capped; sunder burst). No screenshots (software GL too slow here).
 

@@ -415,8 +415,25 @@ export function saveBay(key: string, st: BayState) {
   try { localStorage.setItem(key, JSON.stringify(bayToJson(st))); } catch { /* storage blocked */ }
 }
 
-/** The saved bay (an older save migrated, with notes), or null if there's none or it doesn't read back. */
+/** The saved bay (an older save migrated, with notes), or null if there's none or it doesn't read back. A save that
+ *  exists but won't read is copied to `<key>:unreadable` first, so the fresh bay that replaces it can't wipe it. */
 export function loadBay(key: string): BayState | null {
-  try { return readBay(JSON.parse(localStorage.getItem(key) || "null")); } catch { return null; }
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(key); } catch { return null; }
+  if (!raw) return null;
+  try {
+    const st = readBay(JSON.parse(raw));
+    if (st) return st;
+  } catch { /* unreadable */ }
+  try { localStorage.setItem(key + ":unreadable", raw); } catch { /* storage blocked */ }
+  return null;
 }
 
+/** Save again when the page is hidden or closing (Safari skips beforeunload, and a tab closed in the background only
+ *  gets visibilitychange/pagehide), so the equipped loadout is never behind by a change. */
+export function saveOnLeave(save: () => void) {
+  const hidden = () => { if (document.visibilityState === "hidden") save(); };
+  addEventListener("visibilitychange", hidden);
+  addEventListener("pagehide", save);
+  addEventListener("beforeunload", save);
+}
