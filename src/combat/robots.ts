@@ -1,8 +1,8 @@
 // Hostile robots, the sim (no drawing: robotsDraw.ts draws it; shapes and leg maths in robotLegs.ts). Keith
 // 2026-10-24: "robots ... swarm across the land. Most ... quite small, but some of them are larger." Reshaped twice
 // the same day (Keith): they are autonomous terraforming machines in three sizes, all reading as working machines.
-// Small scrappers (most of them): four-legged starfish that scuttle and crab any way without turning, pour over the
-// dunes as a pack (spatial-hash separation plus alignment), leap onto the mech and latch on, tearing at its plating
+// Small scrappers (most of them): four-legged starfish with a head that pour over the dunes as a flock (Keith
+// 2026-11-16: facing their run and carving after it, spatial-hash separation, alignment, cohesion and a shared weave), leap onto the mech and latch on, tearing at its plating
 // until shot off, stomped off or shaken off by a fast mech; a share hang back and plink.
 // Medium cutters: crab-like on four planted, stepping legs with a circular saw in front; they walk in at a medium
 // pace and either hold at mid range firing slugs or close in, and any of them that gets close winds up (saw spinning
@@ -44,8 +44,17 @@ export const ROBOT_DEFAULTS = {
   robotSpacing: 2.5,
   robotSepStrength: 4,
   robotGap: 0.4,
-  robotAlign: 0.35,
+  robotAlign: 0.5,
   robotAlignRadius: 3,
+  // Small ones: the flock (Keith 2026-11-16: "they don't have a head ... don't swarm like a flock").
+  robotRunTurn: 300,
+  robotFaceMin: 1.2,
+  robotCarve: 0.35,
+  robotCohesion: 0.45,
+  robotWeave: 35,
+  robotWeavePeriod: 7,
+  robotWeaveSize: 40,
+  robotArrive: 0,
   robotHp: 12,
   robotSize: 1.8,
   robotSizeJitter: 0.08,
@@ -330,6 +339,14 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotGap", label: "Hard body radius (× size)", min: 0.2, max: 1, step: 0.01, group: G1, tip: "Bodies never overlap closer than the sum of these" },
   { key: "robotAlign", label: "Pack alignment", min: 0, max: 1, step: 0.01, group: G1, tip: "How much each one matches its neighbours' run: 0 loose, 1 a tight pack" },
   { key: "robotAlignRadius", label: "Pack radius (m)", min: 1, max: 8, step: 0.1, group: G1 },
+  { key: "robotRunTurn", label: "Flock: head turn (°/s)", min: 0, max: 1440, step: 10, group: G1, tip: "Small runners turn their head to where they run this fast (0: the old crabbing, hub drifting)" },
+  { key: "robotFaceMin", label: "Flock: face the run above (m/s)", min: 0, max: 6, step: 0.1, group: G1, tip: "Slower than this, the hub drifts as before" },
+  { key: "robotCarve", label: "Flock: run along the head", min: 0, max: 0.95, step: 0.01, group: G1, tip: "How much the run bends to where the head points each tick: 0 they slide any way, high they carve arcs like a flock" },
+  { key: "robotCohesion", label: "Flock: cohesion (1/s)", min: 0, max: 3, step: 0.01, group: G1, tip: "Pull toward the middle of the neighbours within the pack radius (m/s per m off it)" },
+  { key: "robotWeave", label: "Flock: weave (°)", min: 0, max: 80, step: 1, group: G1, tip: "A slow flow field swings the pack's way in by up to this; neighbours feel the same swing, so the flock sweeps together. Fades out near the target" },
+  { key: "robotWeavePeriod", label: "Flock: weave period (s)", min: 1, max: 30, step: 0.5, group: G1 },
+  { key: "robotWeaveSize", label: "Flock: weave size (m)", min: 5, max: 150, step: 1, group: G1, tip: "How far apart two packs must be to weave differently" },
+  { key: "robotArrive", label: "Flock: slow arriving within (m)", min: 0, max: 15, step: 0.5, group: G1, tip: "Small runners walking to a spot (not a foe) slow down this close to it (0 off; the summoner's swarm sets its own)" },
   { key: "robotHp", label: "Health", min: 1, max: 100, step: 1, group: G1 },
   { key: "robotSize", label: "Size (m)", min: 0.4, max: 4, step: 0.05, group: G1, tip: "Hub centre to foot is about 0.6 × this" },
   { key: "robotSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G1 },
@@ -873,6 +890,8 @@ export class RobotSwarm {
   private slotOwner = new Int32Array(SLOTS_MAX).fill(-1);
   private latchN = 0;
   // Spatial hash (counting sort, rebuilt every update) over grounded live robots.
+  /** Sim time (s), for the flock's weave. */
+  private simTime = 0;
   private cellStart = new Int32Array(HASH_SIZE + 1);
   private cellFill = new Int32Array(HASH_SIZE);
   private cellOf = new Int32Array(ROBOT_MAX);
@@ -1247,6 +1266,7 @@ export class RobotSwarm {
   private stepBody(dt: number, base: RobotTarget): void {
     const v = this.v, { px, py, pz, vx, vy, vz, state, stateTime, size } = this;
     if (dt <= 0) return;
+    this.simTime += dt;
     // The mech's motion: given, or measured from its last position.
     if (base.vx !== undefined && base.vz !== undefined) { this.tvx = base.vx; this.tvz = base.vz; }
     else if (Number.isFinite(this.tPrevX)) {
@@ -1419,9 +1439,21 @@ export class RobotSwarm {
           wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
         } else {
           const fan = mid ? v.robotMidFlank : v.robotFlank;
-          const fa = this.flank[i] * fan * DEG * Math.min(1, dist / 50);
+          let fa = this.flank[i] * fan * DEG * Math.min(1, dist / 50);
+          let sk = spd;
+          if (!mid) {
+            // The flock's weave: a slow flow field over the ground, the same for neighbours, so a pack swings its way
+            // in together (fading out within ~10 m of the target so the attack itself is straight).
+            if (v.robotWeave > 0) {
+              const w = (Math.PI * 2) / Math.max(0.5, v.robotWeavePeriod), t = this.simTime * w, ks = (Math.PI * 2) / Math.max(1, v.robotWeaveSize);
+              const field = Math.sin(px[i] * ks + t) * 0.6 + Math.sin(pz[i] * ks * 0.8 - t * 0.73 + 1.3) * 0.4;
+              fa += field * v.robotWeave * DEG * Math.max(0, Math.min(1, (dist - keep - 6) / 14));
+            }
+            // A spot to walk to (radius under 0.4: not a foe): slow arriving, so a summoned flock settles round it.
+            if (own && v.robotArrive > 0 && target.radius < 0.4) sk *= Math.max(0.15, Math.min(1, (dist - keep) / v.robotArrive));
+          }
           const c = Math.cos(fa), sn = Math.sin(fa);
-          wx = (ux * c - uz * sn) * spd; wz = (uz * c + ux * sn) * spd;
+          wx = (ux * c - uz * sn) * sk; wz = (uz * c + ux * sn) * sk;
         }
       } else if (st === FIRE) {
         face = this.beamT[i] >= 0 ? Math.atan2(this.bax[i] - px[i], this.baz[i] - pz[i]) : Math.atan2(ux, uz);
@@ -1444,7 +1476,7 @@ export class RobotSwarm {
         vx[i] *= f; vz[i] *= f;
       } else {
         // Separation (soft), alignment with the pack, and a hard gap (positional, applied after the loop).
-        let sx = 0, sz = 0, avx = 0, avz = 0, an = 0;
+        let sx = 0, sz = 0, avx = 0, avz = 0, an = 0, cox = 0, coz = 0;
         const own = big ? v.robotBigSpacing : mid ? v.robotMidSpacing : 0;
         const xi = px[i], zi = pz[i], ri = this.rad(i), wide = Math.max(reach, ri + this.maxRad, own);
         const inv = this.inv;
@@ -1464,7 +1496,7 @@ export class RobotSwarm {
             if (d > 1e-5) { nx = dx / d; nz = dz / d; } else { const a = (i * 2.39996) % (Math.PI * 2); nx = Math.cos(a); nz = Math.sin(a); }
             // Walkers don't steer round small ones (they shove them aside).
             if (d < soft && (same || !walker)) { const w = 1 - d / soft; sx += nx * w; sz += nz * w; }
-            if (d2 < ar2 && same && state[j] === RUN) { avx += vx[j]; avz += vz[j]; an++; }
+            if (d2 < ar2 && same && state[j] === RUN) { avx += vx[j]; avz += vz[j]; cox -= dx; coz -= dz; an++; }
             if (d < gap) {
               // Heavier ones shove lighter ones; equals share the push.
               const share = same ? 0.5 : RANK[kind] > RANK[this.kind[j]] ? 0 : 1;
@@ -1474,8 +1506,11 @@ export class RobotSwarm {
         }
         if (sp2 > 0 && !lunge) { const k = walker ? Math.min(v.robotSepStrength, 2) : v.robotSepStrength; wx += sx * k; wz += sz * k; }
         if (an > 0 && st === RUN && !walker) {
-          const k = v.robotAlign;
+          const k = v.robotAlign * (0.6 + 0.4 * Math.max(0, Math.min(1, (dist - keep - 6) / 14)));
           wx += (avx / an - wx) * k; wz += (avz / an - wz) * k;
+          // Cohesion: toward the neighbours' middle, on the way in (round the target they spread to surround it).
+          const ck = v.robotCohesion * Math.max(0, Math.min(1, (dist - keep - 6) / 14));
+          if (ck > 0 && !lunge) { wx += (cox / an) * ck; wz += (coz / an) * ck; }
         }
         // Steer out of a keep-out place (the convoy's safe zone).
         if (this.keepOut && !lunge) {
@@ -1504,10 +1539,25 @@ export class RobotSwarm {
         if (walker && Number.isNaN(face)) face = Math.atan2(ux, uz);
         // A weapon quad walks where it's going and lets its turret keep the guns on the mech (Keith 2026-11-01).
         if (mid && st === RUN && this.variant[i] === QUAD_WEAPON && Math.hypot(vx[i], vz[i]) > 0.8) face = Math.atan2(vx[i], vz[i]);
+        // A small runner has a head now (Keith 2026-11-16): it turns it to its run and the run bends after it, so the
+        // pack carves arcs as a flock instead of sliding. Biting a foe it faces the foe.
+        let runTurn = turn;
+        if (!walker && Number.isNaN(face) && v.robotRunTurn > 0) {
+          const sp = Math.hypot(vx[i], vz[i]);
+          if (this.hasT[i] === 1 && dist - target.radius < 2.5 && st === RUN) face = Math.atan2(ux, uz);
+          else if (sp > v.robotFaceMin) face = Math.atan2(vx[i], vz[i]);
+          if (!Number.isNaN(face)) runTurn = v.robotRunTurn * DEG * dt;
+          if (sp > v.robotFaceMin && v.robotCarve > 0 && st === RUN) {
+            // Faded out near the target, where the pack spreads to surround it (separation must win there).
+            const near = Math.max(0, Math.min(1, (dist - keep - 6) / 14));
+            const h = this.heading[i], k = (1 - Math.pow(1 - v.robotCarve, dt * 30)) * near;
+            vx[i] += (Math.sin(h) * sp - vx[i]) * k; vz[i] += (Math.cos(h) * sp - vz[i]) * k;
+          }
+        }
         if (!Number.isNaN(face)) {
           let dh = face - this.heading[i];
           dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-          this.heading[i] += Math.max(-turn, Math.min(turn, dh));
+          this.heading[i] += Math.max(-runTurn, Math.min(runTurn, dh));
         }
       }
       if (!walker && Number.isNaN(face) && st !== DOWN) {

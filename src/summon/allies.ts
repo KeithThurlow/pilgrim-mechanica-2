@@ -49,6 +49,8 @@ export const ALLY_DEFAULTS = {
   swarmRebuild: 3,
   swarmGuard: 12,
   swarmHome: 4,
+  swarmMill: 3,
+  swarmArrive: 5,
   swarmSendRange: 70,
   swarmHunt: 16,
   swarmSendTime: 25,
@@ -85,6 +87,8 @@ export const ALLY_PARAMS: Param[] = [
   { key: "swarmRebuild", label: "One rebuilt every (s)", min: 0.1, max: 30, step: 0.1, group: GS },
   { key: "swarmGuard", label: "At home: bite foes within (m of the mech)", min: 0, max: 40, step: 1, group: GS },
   { key: "swarmHome", label: "At home: cloud size (m)", min: 1, max: 15, step: 0.5, group: GS },
+  { key: "swarmMill", label: "At home: flock circles at (m/s)", min: 0, max: 10, step: 0.1, group: GS, tip: "Keith 2026-11-16: at home the flock follows a leader point that circles behind the mech this fast, so it keeps moving as one; 0: each stands at its spot (the old way)" },
+  { key: "swarmArrive", label: "Slow arriving within (m)", min: 0, max: 15, step: 0.5, group: GS, tip: "They ease in to their spot in the flock instead of overshooting" },
   { key: "swarmSendRange", label: "Sent: at most (m)", min: 5, max: 200, step: 1, group: GS, tip: "The send key throws them at the cursor (or your lock), at most this far" },
   { key: "swarmHunt", label: "Sent: bite foes within (m of the spot)", min: 2, max: 60, step: 1, group: GS },
   { key: "swarmSendTime", label: "Sent: home after (s)", min: 2, max: 120, step: 1, group: GS },
@@ -112,6 +116,8 @@ export class Allies {
   private compClock: number[] = [];
   private swarm: Unit[] = [];
   private swarmClock = 0;
+  /** The home flock's leader angle round its centre (rad). */
+  private millA = 0;
   /** 1 while the unit's target is a foe (its shots and bites count); else it's walking to its spot. */
   private engaged = new Uint8Array(1024);
   private homeA = new Float32Array(1024); private homeR = new Float32Array(1024);
@@ -166,6 +172,7 @@ export class Allies {
     a.robotQuadNear = V.compNear; a.robotQuadFar = Math.max(V.compNear, V.compFar);
     a.robotQuadMiniDamage = V.compMiniDamage; a.robotQuadMiniPause = V.compMiniPause;
     a.robotQuadRocketDamage = V.compRocketDamage; a.robotQuadRocketPause = V.compRocketPause;
+    a.robotArrive = V.swarmArrive;
     a.robotHp = V.swarmHp; a.robotRunSpeed = V.swarmSpeed; a.robotBiteDamage = V.swarmBite;
     a.robotShooterShare = 0; a.robotBigLobLead = 0; a.robotSpeedJitter = 0.08;
     // Keeping up (Keith 2026-11-02: summons sprint with you): faster than the mech while it's faster than them.
@@ -218,7 +225,7 @@ export class Allies {
   }
 
   /** Aim unit i at a foe, or walk it to a spot (standing still once there). */
-  private steer(i: number, foe: Foe | null, sx: number, sz: number) {
+  private steer(i: number, foe: Foe | null, sx: number, sz: number, settle = true) {
     const sw = this.sw;
     if (foe) {
       this.engaged[i] = 1; sw.setFrozen(i, 0);
@@ -229,7 +236,9 @@ export class Allies {
     this.engaged[i] = 0;
     if (sw.kind[i] === MID) sw.setShooter(i, 0);
     const d = Math.hypot(sw.px[i] - sx, sw.pz[i] - sz);
-    if (sw.frozen[i] ? d > 4 : d < 1.8) sw.setFrozen(i, !sw.frozen[i]);
+    // Standing still at the spot (not while the flock mills: they keep moving with it).
+    if (!settle) { if (sw.frozen[i]) sw.setFrozen(i, 0); }
+    else if (sw.frozen[i] ? d > 4 : d < 1.8) sw.setFrozen(i, !sw.frozen[i]);
     sw.setTarget(i, sx, sw.hubY[i], sz, 0.3);
   }
 
@@ -288,6 +297,12 @@ export class Allies {
       }
     }
     const sent = this.mode === "sent";
+    // The home flock follows a leader point circling behind the mech; each unit keeps a small offset from it, so they
+    // move as one flock (cohesion and alignment in the sim do the rest).
+    const mill = V.swarmMill > 0, lr = V.swarmHome * 0.8;
+    if (mill) this.millA += (V.swarmMill / Math.max(1, lr)) * dt;
+    const homeX = P.x - fx * (V.swarmHome + 3), homeZ = P.z - fz * (V.swarmHome + 3);
+    const leadX = homeX + Math.cos(this.millA) * lr, leadZ = homeZ + Math.sin(this.millA) * lr;
     const swarmFoes = sent ? this.foesNear(this.sendX, this.sendZ, V.swarmHunt) : this.foesNear(P.x, P.z, V.swarmGuard);
     if (sent) {
       this.clearT = swarmFoes.length ? 0 : this.clearT + dt;
@@ -302,11 +317,14 @@ export class Allies {
       let sx: number, sz: number;
       if (this.mode === "sent") {
         sx = this.sendX + Math.cos(this.homeA[i]) * this.homeR[i] * 3; sz = this.sendZ + Math.sin(this.homeA[i]) * this.homeR[i] * 3;
+      } else if (mill) {
+        const a = this.homeA[i], r = V.swarmHome * 0.6 * this.homeR[i];
+        sx = leadX + Math.cos(a) * r; sz = leadZ + Math.sin(a) * r;
       } else {
         const a = this.homeA[i], r = V.swarmHome * this.homeR[i];
-        sx = P.x - fx * (V.swarmHome + 3) + Math.cos(a) * r; sz = P.z - fz * (V.swarmHome + 3) + Math.sin(a) * r;
+        sx = homeX + Math.cos(a) * r; sz = homeZ + Math.sin(a) * r;
       }
-      this.steer(i, foe, sx, sz);
+      this.steer(i, foe, sx, sz, !mill || sent);
     }
 
     // Step them: rounds, rockets and bites only on a foe.
