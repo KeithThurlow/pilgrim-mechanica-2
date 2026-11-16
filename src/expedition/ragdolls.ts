@@ -25,7 +25,7 @@ export function robotRagdolls(sw: RobotSwarm, deaths: DeathPhysics) {
     const reactor = sw.cores.find((c) => c.id === sw.uid[i]) ?? null;
     const fx = reactor ? reactor.fx : nx, fz = reactor ? reactor.fz : nz;
     const d = deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, fx, fz, kind === SMALL ? Math.max(3, speed) : 1, reactor ? reactor.angV : 0);
+      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, fx, fz, kind === SMALL ? Math.max(3, speed) : reactor ? 1 : Math.max(1, sw.deathFling[i]), reactor ? reactor.angV : 0, sw.deathUp[i]);
     if (reactor) wrecks.add(reactor.id, d);
     prev?.(i, nx, nz, speed);
   };
@@ -37,7 +37,7 @@ export function banditRagdolls(sw: InfantrySwarm, deaths: DeathPhysics) {
   sw.hideDead = true;
   sw.onDeath = (i, nx, nz, speed) => {
     deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed);
+      { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed, 0, sw.deathUp[i]);
     prev?.(i, nx, nz, speed);
   };
 }

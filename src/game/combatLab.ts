@@ -273,7 +273,7 @@ export async function combatLab<E extends object>(o: CombatLabOptions<E>): Promi
       ABILITY_TOPIC, SUMMON_TOPIC,
       { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
       { id: "legs", label: "Legs", groups: ["Move", "Hover", "Lean", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
-      { id: "deaths", label: "Deaths", groups: ["Mech wrecks", "Death physics"] },
+      { id: "deaths", label: "Deaths", groups: ["Blast launch", "Mech wrecks", "Death physics"] },
       PILOT_TOPIC,
       { id: "hits", label: "Hits and dust", groups: ["Water effects", "Telegraphs", "Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Ground dents", "Sound"] },
       { id: "dunes", label: "Dunes", groups: ["Dunes", "Shape", "Craters", "Sand surface", "Ground dents", "Ground dents: surfaces", "Streaming"] },

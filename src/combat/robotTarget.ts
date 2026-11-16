@@ -7,17 +7,20 @@
 // robotBigBlast, so a blast on an excavator's bucket or chassis hurts it. Host-owned damage.
 // It is also the swarm's owner in the register (src/game/register.ts): once added (bf.register.add(target)) every hit
 // test here (rounds, sheets, splash) tests only the robots the register's grid hands back, not the whole swarm.
+import { blastKick, knockOf, type Kick } from "../game/blastLaunch";
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import type { BarEntry } from "../ui/healthBars";
 import { gatherBars } from "../game/entityBars";
-import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, PART_CORE, type RobotSwarm } from "./robots";
+import { DOWN, DEAD, SMALL, MID, BIG, RUN, FIRE, PART_BODY, PART_LEG, PART_FOOT, PART_CORE, QUAD_WEAPON, type RobotSwarm } from "./robots";
 import { BIG_CORE_Y } from "./robotWeakPoints";
 import { BIG_BODY_H, MID_BODY_H, WALK_LEGS, type V3 } from "./robotLegs";
 import { inBand, sheetCircle, sheetSegment, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
 import { armourHit } from "../game/armour";
+
+const KICK: Kick = { out: 0, up: 0 }, KNOCK: Kick = { out: 0, up: 0 };
 
 export class RobotTarget implements Hittable, Owner {
   readonly name = "robots";
@@ -186,7 +189,17 @@ export class RobotTarget implements Hittable, Owner {
       const dx = blast ? sw.px[i] - at.x : dir.x, dz = blast ? sw.pz[i] - at.z : dir.z;
       // A big one's legs in a blast's reach wear down too (robotWeakPoints.ts): a leg shot through can fell it.
       if (blast && kind === BIG && this.blastLegs(i, at.x, at.y, at.z, radius, damage, o?.pierce, dx, dz)) { this.kills++; n++; continue; }
-      if (sw.damage(i, armourHit(damage * kk * best, sw.armourOf(i), o?.pierce), dx, dz)) this.kills++;
+      const amount = armourHit(damage * kk * best, sw.armourOf(i), o?.pierce);
+      if (blast) {
+        // Thrown out from it and up (src/game/blastLaunch.ts), by the distance to its body and how heavy its kind is.
+        const quad = kind === MID && sw.variant[i] === QUAD_WEAPON;
+        const w = kind === SMALL ? v.blastWeightLight : kind === BIG ? v.blastWeightBig : quad ? v.blastWeightQuad : v.blastWeightCutter;
+        const d = Math.max(0, Math.hypot(sw.px[i] - at.x, sw.hubY[i] - at.y, sw.pz[i] - at.z) - sw.size[i] * 0.4);
+        blastKick(d, radius, w, v, KICK);
+        knockOf(KICK, v, KNOCK);
+        const fl = Math.hypot(dx, dz), ox = fl > 0.05 ? dx : dir.x, oz = fl > 0.05 ? dz : dir.z;
+        if (sw.blastHit(i, amount, ox, oz, KICK.out, KICK.up, KNOCK.out, KNOCK.up)) this.kills++;
+      } else if (sw.damage(i, amount, dx, dz)) this.kills++;
       n++;
     }
     return n;

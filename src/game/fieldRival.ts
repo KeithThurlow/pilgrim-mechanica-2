@@ -25,7 +25,8 @@ import { Summons, type SummonValues } from "../summon/summons";
 import { SummonKeys } from "../summon/summonKeys";
 import { applyGear } from "../summon/gear";
 import { FLAG } from "./register";
-import type { Resolved } from "../items/loadout";
+import type { Resolved, Loadout } from "../items/loadout";
+import type { Item } from "../items/item";
 import type { DeathPhysics } from "../physics/deaths";
 
 export interface RivalSetup {
@@ -84,6 +85,9 @@ export class FieldRival {
   private summonKeys: SummonKeys | null = null;
   private sv = {} as SummonValues;
   private fit: Resolved | null = null;
+  private lo: Loadout | null = null;
+  /** What it has fitted (its hulk's parts when it dies; src/expedition/hulks.ts). */
+  fitted(): (Item | null)[] { return this.lo ? Object.values(this.lo) : []; }
 
   constructor(protected bf: Battlefield, private scene: THREE.Scene, v: FieldRivalValues, protected player: MechUnit) {
     this.rv = { ...v, ...RIVAL_AI_DEFAULTS, ...(RIVAL_LEVELS.veteran as Partial<RivalAiValues>) } as FieldRivalValues & RivalAiValues;
@@ -126,6 +130,7 @@ export class FieldRival {
     Object.assign(v, RIVAL_AI_DEFAULTS, RIVAL_LEVELS[o.ai] as Partial<RivalAiValues>);
     this.level = Math.max(1, Math.round(o.level));
     const lo = rollRivalLoadout(o.seed, v, { level: this.level });
+    this.lo = lo;
     const r = resolve(lo, { ...v, bareDashCharges: v.rivalBareDashCharges });
     applyLoadout(unit, r);
     unit.hullOverride = Math.round(r.values.hull * o.hull);

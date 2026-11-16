@@ -154,7 +154,7 @@ export class Allies {
       sw.hideDead = true;
       sw.onDeath = (i, nx, nz, speed) => {
         const { parts, joints } = robotRagdoll(sw, i, SUMMON_PAINT.plate, SUMMON_PAINT.dark);
-        deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i], { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, sw.kind[i] === SMALL ? Math.max(3, speed) : 1);
+        deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i], { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, sw.kind[i] === SMALL ? Math.max(3, speed) : Math.max(1, sw.deathFling[i]), 0, sw.deathUp[i]);
       };
     }
   }

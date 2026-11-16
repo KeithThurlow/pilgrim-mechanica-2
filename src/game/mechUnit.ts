@@ -124,6 +124,7 @@ import { MECH_WRECK_DEFAULTS, MECH_WRECK_PARAMS, type MechPose } from "../physic
 import { MechFxView, type MechFx } from "./mechFx";
 import { shotLine } from "../weapons/shotLine";
 import { Poise, POISE_DEFAULTS, POISE_PARAMS } from "./poise";
+import { BLAST_LAUNCH_DEFAULTS, BLAST_LAUNCH_PARAMS } from "./blastLaunch";
 
 export const MECH_DEFAULTS = {
   ...DASH_DEFAULTS,
@@ -137,6 +138,7 @@ export const MECH_DEFAULTS = {
   ...ABILITY_DEFAULTS,
   // Stagger for every unit (Keith 2026-11-15; src/game/poise.ts): the sliders live here, in every combat lab's list.
   ...POISE_DEFAULTS,
+  ...BLAST_LAUNCH_DEFAULTS,
   /** The legs' trample stats (src/items/bases.ts), × the Trample sliders; the loadout sets them. */
   trample: 1,
   crush: 1,
@@ -168,6 +170,7 @@ export const MECH_PARAMS: Param[] = [
   ...REPAIR_PARAMS,
   ...ABILITY_PARAMS,
   ...POISE_PARAMS,
+  ...BLAST_LAUNCH_PARAMS,
   { key: "hull", label: "Hull (hit points)", min: 50, max: 10000, step: 10, group: "Mech health" },
   { key: "armour", label: "Hull armour", min: 0, max: 40, step: 0.5, group: "Mech health", tip: "Flat armour per hit (src/game/armour.ts): a hit loses this × (1 − its pierce), keeping at least the floor share. Bites, saws and raider small arms ignore it" },
   { key: "roundAp", label: "Minigun armour pierce", min: 0, max: 1, step: 0.01, group: "Rounds", tip: "Share of a target's armour each round ignores (an item's own pierce stat wins)" },

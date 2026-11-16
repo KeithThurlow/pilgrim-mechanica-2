@@ -49,8 +49,8 @@ export class DeathsWorker {
         const [id, kind, x] = a as [number, string, unknown[]];
         let d: Dead;
         if (kind === "ragdoll") {
-          const [parts, joints, px, py, pz, yaw, vel, dx, dz, s, tip] = x as [PartSpec[], JointSpec[], number, number, number, number, { x: number; y: number; z: number }, number, number, number, number];
-          d = P.ragdoll(parts, joints, px, py, pz, yaw, vel, dx, dz, s, tip);
+          const [parts, joints, px, py, pz, yaw, vel, dx, dz, s, tip, up] = x as [PartSpec[], JointSpec[], number, number, number, number, { x: number; y: number; z: number }, number, number, number, number, number];
+          d = P.ragdoll(parts, joints, px, py, pz, yaw, vel, dx, dz, s, tip, up ?? 0);
         } else if (kind === "heavy") {
           const [parts, joints, lin, ang, o] = x as [PartSpec[], JointSpec[], { x: number; y: number; z: number }[], { x: number; y: number; z: number }, { damping: number; moveFor: number; thud: { part: number; at: [number, number, number] }[] }];
           d = P.heavy(parts, joints, lin, ang, { ...o, hold: this.V });

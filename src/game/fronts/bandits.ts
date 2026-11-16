@@ -80,7 +80,7 @@ export function banditsFront(): Front {
       s.hideDead = true;
       s.onDeath = (i, nx, nz, speed) => {
         lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[s.look[i] & 3]), BANDIT_JOINTS, s.px[i], s.py[i], s.pz[i], s.heading[i],
-          { x: s.vx[i] * 0.3, y: 0, z: s.vz[i] * 0.3 }, nx, nz, speed);
+          { x: s.vx[i] * 0.3, y: 0, z: s.vz[i] * 0.3 }, nx, nz, speed, 0, s.deathUp[i]);
       };
       run = {
         spawnGroup() {

@@ -81,7 +81,7 @@ export function warbandFront(): Front {
       riders.hideDead = true;
       riders.onDeath = (i, nx, nz, speed) => {
         lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[riders.look[i] & 3]), BANDIT_JOINTS, riders.px[i], riders.py[i], riders.pz[i], riders.heading[i],
-          { x: riders.vx[i] * 0.3, y: 0, z: riders.vz[i] * 0.3 }, nx, nz, speed);
+          { x: riders.vx[i] * 0.3, y: 0, z: riders.vz[i] * 0.3 }, nx, nz, speed, 0, riders.deathUp[i]);
       };
       const from = new THREE.Vector3(), dir = new THREE.Vector3();
       let slot = 2;

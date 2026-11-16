@@ -1,12 +1,15 @@
 // The bandit swarm as one target for the battlefield: rounds test every bandit's capsule through the swarm's spatial
 // hit test, and the nearest one hit takes the damage. Also the swarm's owner in the register (src/game/register.ts):
 // once added (bf.register.add(target)) every hit test here tests only the bandits the grid hands back.
+import { blastKick, knockOf, type Kick } from "../game/blastLaunch";
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import { DOWN, type InfantrySwarm } from "./infantry";
+import { DOWN, INFANTRY_MAX, type InfantrySwarm } from "./infantry";
 import { inBand, sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
+
+const KICK: Kick = { out: 0, up: 0 }, KNOCK: Kick = { out: 0, up: 0 };
 
 export class InfantryTarget implements Hittable, Owner {
   readonly name: string;
@@ -19,6 +22,9 @@ export class InfantryTarget implements Hittable, Owner {
   readonly cull = new SwarmCull();
 
   /** look: what the swarm is made of (the humanoid robots, src/combat/droids.ts: metal that stops rounds like a cutter). */
+  /** Who a splash already measured (by stamp). */
+  private readonly seen = new Uint32Array(INFANTRY_MAX);
+  private stampN = 0;
   constructor(private swarm: InfantrySwarm, readonly team: number, look: { name: string; surface: HitSurface; material: PenMaterial } = { name: "bandits", surface: "flesh", material: "flesh" }) {
     this.name = look.name; this.surface = look.surface; this.pen = look.material;
   }
@@ -68,15 +74,25 @@ export class InfantryTarget implements Hittable, Owner {
       if (d2 > r2) return;
       if (o?.cover?.(sw.px[i], sw.py[i] + top * 0.6, sw.pz[i])) return;
       // Full share at the centre, half at the edge.
-      if (sw.damage(i, damage * (1 - 0.5 * Math.sqrt(d2) / radius), dir.x, dir.z)) this.kills++;
+      const d = Math.sqrt(d2), amount = damage * (1 - 0.5 * d / radius);
+      if (o?.blast) {
+        // An explosive throws them out from it and up (src/game/blastLaunch.ts); right on top, the way it was going.
+        const fl = Math.hypot(dx, dz), ox = fl > 0.05 ? dx : dir.x, oz = fl > 0.05 ? dz : dir.z;
+        blastKick(d, radius, sw.v.blastWeightLight, sw.v, KICK);
+        knockOf(KICK, sw.v, KNOCK);
+        if (sw.blastHit(i, amount, ox, oz, KICK.out, KICK.up, KNOCK.out)) this.kills++;
+      } else if (sw.damage(i, amount, dir.x, dir.z)) this.kills++;
       n++;
     };
     const only = this.cull.round(at.x, at.z, radius);
+    const stamp = ++this.stampN, seen = this.seen;
     for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
       const i = only ? only[j] : j;
-      if (sw.state[i] < DOWN) hit(i, false);
+      if (sw.state[i] < DOWN) { seen[i] = stamp; hit(i, false); }
     }
-    if (o?.blast) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === DOWN) hit(i, true);
+    // The knocked-down (not in the register), and those who were when it was built and got up since (blasts knock
+    // crowds flat, src/game/blastLaunch.ts, so plenty get up between a register build and the next blast).
+    if (o?.blast) for (let i = 0; i < sw.hi; i++) if (seen[i] !== stamp && sw.state[i] <= DOWN) hit(i, sw.state[i] === DOWN);
     return n;
   }
 
