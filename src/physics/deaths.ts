@@ -24,6 +24,7 @@ export const DEATH_DEFAULTS = phoneDefaults({
   floorSize: 120,
   ragdollsPerFrame: 6,
   reactorFling: 14,
+  blastTumble: 0.6,
 });
 export type DeathValues = typeof DEATH_DEFAULTS;
 
@@ -36,6 +37,7 @@ export const DEATH_PARAMS: Param[] = [
   { key: "maxRagdolls", label: "Moving bodies at once", min: 1, max: 200, step: 1, group: "Death physics", tip: "Past this the oldest freeze (the cost of the physics)" },
   { key: "bodyStays", label: "Bodies stay (s)", min: 2, max: 120, step: 1, group: "Death physics", tip: "Then they sink into the sand and are cleared" },
   { key: "reactorFling", label: "Reactor blast throws the wreck (m/s)", min: 0, max: 60, step: 0.5, group: "Death physics", tip: "Keith 2026-11-06: a big walker's, weapon quad's or strider's reactor going up blows its own wreck apart, this fast near the hull" },
+  { key: "blastTumble", label: "Tumble (rad/s per m/s up)", min: 0, max: 3, step: 0.05, group: "Blast launch", tip: "Extra spin on a body a blast throws up (src/game/blastLaunch.ts)" },
   { key: "floorSize", label: "Physics floor (m)", min: 40, max: 300, step: 10, group: "Death physics", tip: "Size of the patch of dunes the physics knows, centred on the camera" },
   { key: "ragdollsPerFrame", label: "New ragdolls per frame", min: 1, max: 60, step: 1, group: "Performance", tip: "Deaths past this in one frame wait their turn, flying on as they were thrown, and get their physics a frame or two later (perf pass 1: a barrage killing dozens at once made the physics spike to hundreds of ms). The cap on moving bodies is under Death physics" },
 ];
@@ -182,10 +184,12 @@ export class DeathPhysics {
 
   /**
    * Hand a body to the physics: parts and joints in its own frame, placed at (x, y, z) facing yaw, moving with the
-   * velocity it had, and thrown by a push (dirX, dirZ: the kill's flat direction; strength in m/s).
+   * velocity it had, and thrown by a push (dirX, dirZ: the kill's flat direction; strength in m/s). up (m/s): a
+   * blast's throw upward (src/game/blastLaunch.ts), on every part about alike so the whole body leaves the ground,
+   * with blastTumble × it of extra spin.
    */
   ragdoll(parts: PartSpec[], joints: JointSpec[], x: number, y: number, z: number, yaw: number,
-    vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number, tip = 0): Dead {
+    vel: { x: number; y: number; z: number }, dirX: number, dirZ: number, strength: number, tip = 0, up = 0): Dead {
     const v = this.v;
     const base = this.q.setFromAxisAngle(UP, yaw);
     const push = strength * v.deathPush;
@@ -194,6 +198,8 @@ export class DeathPhysics {
       age: 0, live: true, kind: "ragdoll", sink: 0, done: false,
     };
     const pend: Pending = { joints, lin: [], ang: [], floor: y };
+    // A blast's throw tumbles it end over end away from the blast (one way for the whole body, so it stays together).
+    const bl = Math.hypot(dirX, dirZ) || 1, roll = up > 0 ? up * (v.blastTumble ?? 0.6) : 0, bx = dirX / bl, bz = dirZ / bl;
     parts.forEach((p, k) => {
       const at = this.v3.set(p.at[0], p.at[1], p.at[2]).applyQuaternion(base);
       // Upper parts get more of the push, so a body folds over instead of sliding.
@@ -204,12 +210,12 @@ export class DeathPhysics {
       // tip (rad/s): the whole body starts to topple about its feet along (dirX, dirZ), a tall wreck tipping over
       // (Keith 2026-11-06): each part moves as ω × its offset from the feet, ω = tip · (up × dir).
       const l = Math.hypot(dirX, dirZ) || 1, tx = tip * dirX / l, tz = tip * dirZ / l;
-      pend.lin.push({ x: vel.x + dirX * push * tall + tx * at.y, y: vel.y + push * v.deathLift * tall - (tx * at.x + tz * at.z), z: vel.z + dirZ * push * tall + tz * at.y });
-      pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4 + tz, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 - tx });
+      pend.lin.push({ x: vel.x + dirX * push * tall + tx * at.y, y: vel.y + push * v.deathLift * tall - (tx * at.x + tz * at.z) + up * (0.85 + 0.15 * tall), z: vel.z + dirZ * push * tall + tz * at.y });
+      pend.ang.push({ x: (Math.random() - 0.5) * v.deathSpin * 4 + tz + bz * roll, y: (Math.random() - 0.5) * v.deathSpin * 2, z: (Math.random() - 0.5) * v.deathSpin * 4 - tx - bx * roll });
     });
     d.pending = pend;
     this.dead.push(d);
-    if (this.remote) { this.remote.made(d, "ragdoll", [parts, joints, x, y, z, yaw, { x: vel.x, y: vel.y, z: vel.z }, dirX, dirZ, strength, tip]); return d; }
+    if (this.remote) { this.remote.made(d, "ragdoll", [parts, joints, x, y, z, yaw, { x: vel.x, y: vel.y, z: vel.z }, dirX, dirZ, strength, tip, up]); return d; }
     // Made now while this frame's allowance lasts, else queued (perf pass 1).
     if (this.madeThisFrame < Math.max(1, v.ragdollsPerFrame ?? 6) && this.waiting.length === 0) this.make(d);
     else this.waiting.push(d);
@@ -255,6 +261,9 @@ export class DeathPhysics {
         .setLinvel(pend.lin[k].x, pend.lin[k].y, pend.lin[k].z)
         .setAngvel(pend.ang[k])
         .setLinearDamping(0.1).setAngularDamping(v.jointDamping * 0.15);
+      // Thrown hard (a blast): continuous collision, so a fast thin part can't pass through the floor coming down.
+      const L = pend.lin[k];
+      if (L.x * L.x + L.y * L.y + L.z * L.z > 100) desc.setCcdEnabled(true);
       const b = w.createRigidBody(desc);
       // Thin parts (a cutter's shins, 11 cm across) could slip through the dune floor's heightfield lying flat on it:
       // their colliders are at least MIN_HALF thick (the look is drawn from the part, not the collider).

@@ -10,6 +10,7 @@ import { steerOut, type KeepOut } from "../game/keepOut";
 import type { Param } from "../core/tweaks";
 import type { Ground } from "../mech/walker";
 import { KIND, FLAG, type Register } from "../game/register";
+import { BLAST_LAUNCH_DEFAULTS } from "../game/blastLaunch";
 import { POISE_DEFAULTS, poiseFade, poiseHitAt, poiseTickAt, clearPoiseAt, type PoiseCols } from "../game/poise";
 import { closingSpeed, pairChance, threatOut, trampleFling, trampleHurt, type GroundThreat, type MechBody, type TrampleHit, type TrampleValues } from "./trample";
 
@@ -70,6 +71,8 @@ export const INFANTRY_DEFAULTS = {
   // Stagger (Keith 2026-11-15; src/game/poise.ts: sliders in the mech's list, the Stagger topic). Droids read poiseDroid
   // through droidValues (src/combat/droids.ts) as their poiseBandit.
   ...POISE_DEFAULTS,
+  // Blast launch (Keith 2026-11-16; src/game/blastLaunch.ts: sliders in the mech's list, the Deaths topic).
+  ...BLAST_LAUNCH_DEFAULTS,
 };
 export type InfantryValues = typeof INFANTRY_DEFAULTS;
 
@@ -232,6 +235,16 @@ export class InfantrySwarm {
   /** Staggers started since construction. */
   staggers = 0;
   private readonly poiseCols: PoiseCols = { build: this.poiseBuild, stun: this.stun, grace: this.stunGrace };
+  /**
+   * Blast launch (src/game/blastLaunch.ts): a blast kill's upward throw (m/s; 0 for any other kill), read by whoever
+   * makes the ragdoll on onDeath (its flat throw is onDeath's speed). Set by blastHit.
+   */
+  readonly deathUp = new Float32Array(INFANTRY_MAX);
+  /** Blast kills and knock-downs since construction. */
+  launched = 0;
+  knocked = 0;
+  private kickOut = -1;
+  private kickUp = 0;
 
   /** The swarm's block of the ECS world (src/combat/infantryWorld.ts): the shared arrays above are views of its columns. */
   readonly block: InfantryBlock;
@@ -286,7 +299,7 @@ export class InfantrySwarm {
       this.slope[i] = 0; this.fallYaw[i] = 0;
       this.frozen[i] = 0; this.calm[i] = 0; this.hasT[i] = 0; this.hold[i] = 0; this.hurry[i] = 0; this.pace[i] = 1;
       this.diveT[i] = 0; this.evadeT[i] = 0; this.rolledFor[i] = 0; this.trampleCd[i] = 0;
-      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0;
+      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0; this.deathUp[i] = 0;
       this.look[i] = Math.floor(this.rand() * 4); this.seed[i] = this.rand();
       this.gen[i]++;
       this.uid[i] = this.nextUid++;
@@ -645,7 +658,12 @@ export class InfantrySwarm {
     // heading, not thrown along it (Keith 2026-11-06: burning bodies flew at the mech).
     const push = l > 1e-6;
     const nx = push ? dirX / l : Math.sin(this.heading[i]), nz = push ? dirZ / l : Math.cos(this.heading[i]);
-    const r = this.rand(), s = push ? throwSpeed * (0.6 + 0.8 * r) : 0;
+    const r = this.rand();
+    // A blast's throw (blastHit): its own speed, scattered less; else the kill's throw.
+    const blast = this.kickOut >= 0 && push;
+    const s = blast ? this.kickOut * (0.85 + 0.3 * r) : push ? throwSpeed * (0.6 + 0.8 * r) : 0;
+    this.deathUp[i] = blast ? this.kickUp * (0.85 + 0.3 * r) : 0;
+    if (blast) this.launched++;
     this.state[i] = DEAD; this.stateTime[i] = 0; this.hp[i] = 0;
     this.block.unlink(i);
     this.vx[i] = nx * s; this.vz[i] = nz * s;
@@ -684,6 +702,31 @@ export class InfantrySwarm {
     if (this.hp[i] > 0) { this.poise(i, amount, dirX, dirZ); return false; }
     this.kill(i, dirX, dirZ, throwSpeed);
     return true;
+  }
+
+  /**
+   * An explosive's blast on bandit i (src/game/blastLaunch.ts): amount of damage, the way out from the blast, and its
+   * throw (m/s out and up, blastKick). A kill flies (onDeath's speed and deathUp); one that lives counts the blast
+   * blastPoise × toward a stagger and, with a knock (m/s, knockOf; 0 none), is knocked flat and slid out. True if killed.
+   */
+  blastHit(i: number, amount: number, dirX: number, dirZ: number, out: number, up: number, knock: number): boolean {
+    if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
+    const v = this.v;
+    if (v.blastPoise > 1 && this.hp[i] > amount) this.poise(i, amount * (v.blastPoise - 1), dirX, dirZ);
+    this.kickOut = out > 0 || up > 0 ? out : -1; this.kickUp = up;
+    const killed = this.damage(i, amount, dirX, dirZ);
+    this.kickOut = -1; this.kickUp = 0;
+    if (killed || !(knock > 0) || this.state[i] >= DEAD) return killed;
+    const l = Math.hypot(dirX, dirZ);
+    if (l < 1e-6) return false;
+    const nx = dirX / l, nz = dirZ / l;
+    if (this.state[i] !== DOWN) this.knocked++;
+    this.state[i] = DOWN; this.stateTime[i] = 0; this.diveT[i] = 0; this.evadeT[i] = 0;
+    this.fallYaw[i] = Math.atan2(nx, nz);
+    this.vx[i] = nx * knock; this.vz[i] = nz * knock;
+    this.shoveX[i] = 0; this.shoveZ[i] = 0;
+    this.fear[i] += v.fearPerDeath;
+    return false;
   }
 
   /** Stagger build on a live one standing (src/game/poise.ts): every hit's damage and a sword's extra

@@ -25,6 +25,7 @@ import {
 import { makeReactor, stepReactor, type Reactor } from "./reactorFall";
 import { RobotBlock } from "./robotWorld";
 import type { World } from "../ecs/world";
+import { BLAST_LAUNCH_DEFAULTS } from "../game/blastLaunch";
 import { POISE_DEFAULTS, poiseFade, poiseHitAt, poiseTickAt, clearPoiseAt, type PoiseCols } from "../game/poise";
 import { WEAK_DEFAULTS, WEAK_PARAMS, BIG_CORE_Y, crippleK, legsLost, raySphere, stumpWay } from "./robotWeakPoints";
 
@@ -307,6 +308,8 @@ export const ROBOT_DEFAULTS = {
   ...WEAK_DEFAULTS,
   // Stagger (Keith 2026-11-15; src/game/poise.ts: its sliders are in the mech's list, the Stagger topic).
   ...POISE_DEFAULTS,
+  // Blast launch (Keith 2026-11-16; src/game/blastLaunch.ts: sliders in the mech's list, the Deaths topic).
+  ...BLAST_LAUNCH_DEFAULTS,
 };
 export type RobotValues = typeof ROBOT_DEFAULTS;
 
@@ -808,6 +811,17 @@ export class RobotSwarm {
   /** Staggers started since construction. */
   staggers = 0;
   private readonly poiseCols: PoiseCols = { build: this.poiseBuild, stun: this.stun, grace: this.stunGrace };
+  /**
+   * Blast launch (src/game/blastLaunch.ts): a blast kill's throw (m/s, out and up; 0 for any other kill), read by
+   * whoever makes the ragdoll on onDeath. Set by blastHit.
+   */
+  readonly deathFling = new Float32Array(ROBOT_MAX);
+  readonly deathUp = new Float32Array(ROBOT_MAX);
+  /** Blast kills and scrappers flung by blasts since construction. */
+  launched = 0;
+  knocked = 0;
+  private kickOut = -1;
+  private kickUp = 0;
   /** A place they steer out of (the convoy's safe zone, src/convoy/safeZone.ts), or null. */
   keepOut: KeepOut | null = null;
   private ko = { x: 0, z: 0 };
@@ -948,7 +962,7 @@ export class RobotSwarm {
       if (i < 0) return made;
       made.push(i);
       this.frozen[i] = 0; this.hasT[i] = 0; this.pace[i] = 1;
-      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0;
+      clearPoiseAt(this.poiseCols, i); this.shoveX[i] = 0; this.shoveZ[i] = 0; this.deathFling[i] = 0; this.deathUp[i] = 0;
       const kind = plan[k], big = kind === BIG, mid = kind === MID;
       const r = radius * Math.sqrt((k + 0.5) / n), a = k * 2.39996 + this.rand() * 0.5;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
@@ -2153,13 +2167,21 @@ export class RobotSwarm {
     this.setState(i, DEAD);
     this.hp[i] = 0;
     this.fallYaw[i] = Math.atan2(nx, nz);
+    // A blast's throw (blastHit, src/game/blastLaunch.ts): out and up, scattered a little.
+    const blast = this.kickOut >= 0 && push;
+    this.deathFling[i] = 0; this.deathUp[i] = 0;
+    if (blast) {
+      const k = 0.85 + 0.3 * this.rand();
+      this.deathFling[i] = this.kickOut * k; this.deathUp[i] = this.kickUp * k;
+      this.launched++;
+    }
     if (this.kind[i] !== SMALL) {
-      // Walkers just collapse where they stand.
+      // Walkers just collapse where they stand (a blast's throw goes to their ragdoll, deathFling).
       this.vx[i] = 0; this.vz[i] = 0; this.vy[i] = 0; this.spin[i] = 0;
     } else {
-      const rr = this.rand(), s = push ? v.robotDeathThrow * (0.6 + 0.8 * rr) : 0;
+      const rr = this.rand(), s = blast ? this.deathFling[i] : push ? v.robotDeathThrow * (0.6 + 0.8 * rr) : 0;
       this.vx[i] = nx * s + (wasAir ? this.tvx : 0); this.vz[i] = nz * s + (wasAir ? this.tvz : 0);
-      this.vy[i] = v.robotDeathPop * (0.5 + this.rand());
+      this.vy[i] = blast ? Math.max(this.deathUp[i], v.robotDeathPop) : v.robotDeathPop * (0.5 + this.rand());
       this.spin[i] = (this.rand() < 0.5 ? -1 : 1) * (6 + this.rand() * 8);
     }
     this.count--;
@@ -2235,6 +2257,31 @@ export class RobotSwarm {
     if (this.hp[i] > 0) { this.poise(i, amount, dirX, dirZ); return false; }
     this.kill(i, dirX, dirZ);
     return true;
+  }
+
+  /**
+   * An explosive's blast on robot i (src/game/blastLaunch.ts): amount of damage (armour taken off already), the way out
+   * from the blast, and its throw (m/s out and up, blastKick). A kill flies (deathFling, deathUp). One that lives counts
+   * the blast blastPoise × toward a stagger, and a scrapper on the ground with a knock (knockOf; 0 none) is flung through
+   * the air (out at knock, up at knockUp), landing knocked down. True if this killed it.
+   */
+  blastHit(i: number, amount: number, dirX: number, dirZ: number, out: number, up: number, knock: number, knockUp: number): boolean {
+    if (i < 0 || i >= this.hi || this.state[i] >= DEAD) return false;
+    const v = this.v;
+    if (v.blastPoise > 1 && this.hp[i] > amount) this.poise(i, amount * (v.blastPoise - 1), dirX, dirZ);
+    this.kickOut = out > 0 || up > 0 ? out : -1; this.kickUp = up;
+    const killed = this.damage(i, amount, dirX, dirZ);
+    this.kickOut = -1; this.kickUp = 0;
+    if (killed || !(knock > 0 || knockUp > 0) || this.kind[i] !== SMALL) return killed;
+    const s = this.state[i];
+    if (s >= DEAD || s === LATCHED || s === LEAP || s === FLUNG) return false;
+    const l = Math.hypot(dirX, dirZ), nx = l > 1e-6 ? dirX / l : 0, nz = l > 1e-6 ? dirZ / l : 0;
+    this.setState(i, FLUNG);
+    this.vx[i] = nx * knock; this.vz[i] = nz * knock; this.vy[i] = knockUp;
+    this.fallYaw[i] = Math.atan2(nx, nz);
+    this.spin[i] = (nx * 3 + nz * 7 > 0 ? 1 : -1) * (6 + knockUp);
+    this.knocked++;
+    return false;
   }
 
   /**

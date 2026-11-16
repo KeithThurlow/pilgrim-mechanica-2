@@ -1,12 +1,15 @@
 // The bandit swarm as one target for the battlefield: rounds test every bandit's capsule through the swarm's spatial
 // hit test, and the nearest one hit takes the damage. Also the swarm's owner in the register (src/game/register.ts):
 // once added (bf.register.add(target)) every hit test here tests only the bandits the grid hands back.
+import { blastKick, knockOf, type Kick } from "../game/blastLaunch";
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
 import { DOWN, type InfantrySwarm } from "./infantry";
 import { inBand, sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
+
+const KICK: Kick = { out: 0, up: 0 }, KNOCK: Kick = { out: 0, up: 0 };
 
 export class InfantryTarget implements Hittable, Owner {
   readonly name: string;
@@ -68,7 +71,14 @@ export class InfantryTarget implements Hittable, Owner {
       if (d2 > r2) return;
       if (o?.cover?.(sw.px[i], sw.py[i] + top * 0.6, sw.pz[i])) return;
       // Full share at the centre, half at the edge.
-      if (sw.damage(i, damage * (1 - 0.5 * Math.sqrt(d2) / radius), dir.x, dir.z)) this.kills++;
+      const d = Math.sqrt(d2), amount = damage * (1 - 0.5 * d / radius);
+      if (o?.blast) {
+        // An explosive throws them out from it and up (src/game/blastLaunch.ts); right on top, the way it was going.
+        const fl = Math.hypot(dx, dz), ox = fl > 0.05 ? dx : dir.x, oz = fl > 0.05 ? dz : dir.z;
+        blastKick(d, radius, sw.v.blastWeightLight, sw.v, KICK);
+        knockOf(KICK, sw.v, KNOCK);
+        if (sw.blastHit(i, amount, ox, oz, KICK.out, KICK.up, KNOCK.out)) this.kills++;
+      } else if (sw.damage(i, amount, dir.x, dir.z)) this.kills++;
       n++;
     };
     const only = this.cull.round(at.x, at.z, radius);

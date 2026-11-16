@@ -780,7 +780,7 @@ const panel = tweakPanel({
     { id: "mech", label: "Your mech", groups: ["Targeting", "Rounds", "Dash", "Trample", "Body collisions", "Sprint kit", "Mech health", "Torso & guns", "Held weapons", "Sensor head", "Minigun", "Move"] },
     { ...WEAPON_TOPIC, groups: [...WEAPON_TOPIC.groups, "Protocols"] }, SAMPLE_TOPIC,
     { id: "legs", label: "Legs", groups: ["Move", "Leg load", "Hover", "Sprint", "Gait", "Idle", "Air", "Landing", "Legs", "Feet", "Feet sink", "Terrain"] },
-    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Death physics", "Mech wrecks", "Sound"] },
+    { id: "hits", label: "Hits and dust", groups: ["Minigun hits", "Minigun FX", "Effects", "Dust", "Dust: look", "Dust: sources", "Dust: surfaces", "Convoy trail", "Ground dents", "Craters", "Blast launch", "Death physics", "Mech wrecks", "Sound"] },
     { id: "light", label: "Light", groups: [...LIGHT_GROUPS, "Cel look"] },
     { id: "camera", label: "Camera", groups: ["Camera"] },
     { id: "perf", label: "Performance", groups: ["Performance"] },

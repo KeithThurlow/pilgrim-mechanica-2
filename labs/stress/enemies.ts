@@ -58,7 +58,7 @@ export class StressRobots {
       const kind = sw.kind[i], [body, leg] = RAG[kind];
       const { parts, joints } = robotRagdoll(sw, i, body, leg);
       lab.deaths.ragdoll(parts, joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-        { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : 1);
+        { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, kind === SMALL ? Math.max(3, speed) : Math.max(1, sw.deathFling[i]), 0, sw.deathUp[i]);
     };
     sw.onFootfall = robotFootfall(bf, sw);
     const lobFrom = new THREE.Vector3();
@@ -118,7 +118,7 @@ export class StressBandits {
     sw.hideDead = true;
     sw.onDeath = (i, nx, nz, speed) => {
       lab.deaths.ragdoll(BANDIT_PARTS(CLOTH[sw.look[i] & 3]), BANDIT_JOINTS, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i],
-        { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed);
+        { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed, 0, sw.deathUp[i]);
     };
   }
 
