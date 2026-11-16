@@ -180,9 +180,10 @@ export const WALKER_DEFAULTS = {
   // of the air: a crest jump's or a fall's landing stance, then the run.
   // Keith 2026-11-16 ("running on the spot"): the run's stride in metres (a full cycle, plant to plant of one foot), so
   // a change of top speed keeps the stride. Was 1.8 to 3 steps/s, set at 16 m/s tops: 5.2 m at today's 8.2, under the
-  // walk's 6.2. Now about 9.5 m with a short flight each step, the trailing foot pushing off 2+ m behind the hips.
-  runStride: 8,
-  runStrideTop: 9.5,
+  // walk's 6.2. 9.5 m looked slow for the speed (Keith 2026-11-16 later): 7.5 m, about 2.2 steps/s at 8.2 m/s, a short
+  // flight each step, the trailing foot pushing off 2 m behind the hips.
+  runStride: 6.5,
+  runStrideTop: 7.5,
   runStanceLen: 3.2,
   runPlant: 1,
   runBlend: 0.6,
@@ -292,7 +293,7 @@ export const WALKER_PARAMS: Param[] = [
   ...SINK_PARAMS,
   ...HOVER_PARAMS,
   { key: "walkSpeed", label: "Walk speed (m/s)", min: 0.5, max: 10, step: 0.1, group: "Move" },
-  { key: "sprintSpeed", label: "Sprint speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move" },
+  { key: "sprintSpeed", label: "Shift run speed (m/s)", min: 1, max: 14, step: 0.1, group: "Move", tip: "Holding Shift on the walk, and where the sprint starts building from. The sprint's own top speed is Sprint › Sprint top speed" },
   { key: "accel", label: "Leg weight stat (speed up)", min: 0.5, max: 20, step: 0.1, group: "Move", tip: "The legs' speed-up stat (leg items roll it); 4 = the Rampart. Lower is heavier: slows the walk's response by Walk: leg weight" },
   { key: "turnRate", label: "Sprint turn rate (°/s)", min: 20, max: 720, step: 5, group: "Move", tip: "Sprinting, how fast the heading swings toward the stick: low commits to a direction (the walk uses Walk: legs turn)" },
   { key: "walkAccel", label: "Walk: speed up (m/s²)", min: 2, max: 80, step: 1, group: "Move", tip: "Twin-stick walk (Keith 2026-10-31): how fast the body's velocity builds along the stick. 30 = walk speed in 0.2 s" },
@@ -410,7 +411,7 @@ export const WALKER_PARAMS: Param[] = [
   { key: "wallScrub", label: "Wall scrub rate (1/s)", min: 1, max: 60, step: 1, group: "Air" },
   { key: "launchUpMax", label: "Fastest take-off upward (m/s)", min: 1, max: 30, step: 0.5, group: "Air", tip: "However steep the ground it leaves from, the mech never takes off upward faster than this (6 m/s rises about 1.8 m). Distance off a crest still comes from speed" },
 
-  { key: "boundTop", label: "Top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 8.2, Stilt 8.5, Siege 7.8 (within 10%); 10 is very fast, 12 end game" },
+  { key: "boundTop", label: "Sprint top speed (m/s)", min: 5, max: 30, step: 0.5, group: "Sprint", tip: "Set by the legs: Rampart 8.2, Stilt 8.5, Siege 7.8 (within 10%); 10 is very fast, 12 end game" },
   { key: "boundShed", label: "Over top: shed (m/s²)", min: 0, max: 40, step: 0.5, group: "Sprint", tip: "Keith 2026-11-16 (grip): faster than the legs' top (the dash's burst carried into the sprint), the speed comes off at least this fast. 0 = only the build's easing (5 s of sliding from a dash)" },
   { key: "boundBuild", label: "Speed build (share/s)", min: 0.05, max: 3, step: 0.01, group: "Sprint", tip: "Each second held closes this share of the gap from the run to top speed" },
   { key: "boundStanceLen", label: "Ground per stance (m)", min: 0.6, max: 6, step: 0.05, group: "Sprint", tip: "How far the body travels over a planted foot: the stance gets shorter in time as the speed builds" },
