@@ -22,7 +22,9 @@ export const DASH_DEFAULTS = {
   dashGap: 0.25,
   dashRegenDelay: 0.8,
   sprintDrain: 0.25,
-  dashCrouch: 1.2,
+  // The old dash's own crouch (Dash.crouch, read by tools/dash-check only). Renamed 2026-11-16: as dashCrouch it shared
+  // the walker's dash-crouch key and, spread after the walker's values in every mech lab, set it to 1.2 m.
+  shoveCrouch: 1.2,
   dashLean: 25,
   dashShoveRadius: 4,
   dashShove: 5,
@@ -211,7 +213,7 @@ export class Dash {
       const s = Math.max(0, s0 + this.speed);
       this.vx = this.dirX * s; this.vz = this.dirZ * s;
       const bump = Math.sin(Math.PI * Math.min(1, u * 1.3));
-      this.crouch = v.dashCrouch * bump;
+      this.crouch = v.shoveCrouch * bump;
       this.lean = (v.dashLean * Math.PI / 180) * bump;
       if (u >= 1) {
         this.t = -1;
@@ -226,7 +228,7 @@ export class Dash {
     this.speed = Math.min(v.slideMax, Math.max(0, this.speed));
     this.vx = this.dirX * this.speed; this.vz = this.dirZ * this.speed;
     const k = Math.min(1, this.speed / 13);
-    this.crouch = v.dashCrouch * 0.6 * k;
+    this.crouch = v.shoveCrouch * 0.6 * k;
     this.lean = (v.dashLean * Math.PI / 180) * 0.5 * k;
   }
 
