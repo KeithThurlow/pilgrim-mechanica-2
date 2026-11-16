@@ -899,6 +899,8 @@ export class RobotSwarm {
   remote: { step(dt: number, base: RobotTarget): void; events(): RobotEvent[] } | null = null;
   /** Snapshots from the sim worker taken onto this view so far (src/sim/robotsRemote.ts; the drawer blends between them). */
   snapStamp = 0;
+  /** The sim worker's clock for the drawer (src/look/treeInterp.ts RemoteLink; set by the view, src/sim/robotsRemote.ts). */
+  link: import("../look/treeInterp").RemoteLink | null = null;
   /** True while a view replays commands it already handed the events of: nothing is raised. */
   silent = false;
 

@@ -7,6 +7,8 @@
 // Stage 6c: drawBetweenTicks(root) puts a model on the app's list (InterpSet, run by createApp under ?tick=N).
 // Ownership: cosmetic, local.
 import type * as THREE from "three/webgpu";
+import { RemoteInterp, type Channel, type Num } from "./remoteInterp";
+export type { Channel };
 
 
 const F = 10; // floats per part: position 3, quaternion 4, scale 3
@@ -209,17 +211,6 @@ function shownInScene(o: THREE.Object3D): 0 | 1 | 2 {
 // drawn frame apply(alpha) writes the blend into the sim's own arrays, the drawer runs, and restore() puts the tick's
 // values back at once, so nothing but the drawer sees a blend. A slot whose key (generation, state) changed between
 // the ticks, or a value that jumped (a phase wrapped), shows this tick's value.
-type Num = Float32Array | Float64Array | Uint8Array | Uint16Array | Uint32Array | Int32Array;
-export interface Channel {
-  a: Float32Array;
-  /** Floats per slot (4 feet × 1: stride 4). */
-  stride?: number;
-  /** An angle: blended the short way round. */
-  angle?: boolean;
-  /** A step bigger than this isn't blended (a wrapped phase). */
-  jump?: number;
-}
-
 export class SlotInterp {
   private prev: Float32Array[];
   private cur: Float32Array[];
@@ -306,27 +297,28 @@ export function runFrameDrawers(dt: number, alpha: number) { for (const d of dra
  * draw run once per drawn frame with them blended (put back straight after). Dropped once its group, having been in
  * the scene, is taken out. Call once, from the drawer's update when betweenTicks() is true.
  */
-export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, channels: Channel[], keys: Num[], draw: (dt: number) => void, stamp?: () => number | null) {
+export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, channels: Channel[], keys: Num[], draw: (dt: number) => void, link?: () => RemoteLink | null) {
   const interp = new SlotInterp(channels, keys);
   interp.capture(hi());
   let seen = false;
-  // A swarm stepped in the sim worker (stamp: its snapshot count; null while it steps here) changes when a snapshot
-  // lands, a little after its tick, not at the tick: the blend runs from the last snapshot to the newest, captured as
-  // it lands, and its alpha is the time since then over the time between snapshots (2026-11-14).
-  let last = -1, at = 0, period = 1000 / 30;
-  const remote = () => { const s = stamp?.(); return s === undefined || s === null ? -1 : s; };
+  // A swarm stepped in the sim worker (link: set while it steps there) is drawn on the game's clock from the
+  // snapshots it was sent, each captured as it lands (src/look/remoteInterp.ts, 2026-11-16).
+  let remote: RemoteInterp | null = null, linked: RemoteLink | null = null;
   drawEachFrame({
-    afterTick: () => { if (remote() < 0) interp.capture(hi()); },
+    afterTick: () => { if (!link?.()) interp.capture(hi()); },
     frame: (dt, alpha) => {
-      const s = remote();
-      if (s >= 0) {
-        const now = performance.now();
-        if (s !== last) {
-          if (last >= 0) period += (Math.min(200, Math.max(8, now - at)) - period) * 0.2;
-          last = s; at = now;
-          interp.capture(hi());
+      const L = link?.() ?? null;
+      if (L) {
+        if (L !== linked) {
+          linked = L;
+          const r = (remote ??= new RemoteInterp(channels, keys));
+          L.onSnap = (id) => r.capture(id, hi());
+          L.interp = r;
         }
-        alpha = Math.min(1, (now - at) / period);
+        if (!group.parent) return;
+        remote!.apply(L.sent, alpha, dt, hi());
+        try { draw(dt); } finally { remote!.restore(); }
+        return;
       }
       if (!group.parent) return;
       interp.apply(alpha);
@@ -334,4 +326,14 @@ export function swarmBetweenTicks(group: THREE.Object3D, hi: () => number, chann
     },
     live: () => { if (group.parent) seen = true; return !(seen && !group.parent); },
   });
+}
+
+/** A swarm view's tie to the sim worker's clock (src/sim/robotsRemote.ts, infantryRemote.ts set it). */
+export interface RemoteLink {
+  /** The newest tick sent to the worker (the sim host's frame id). */
+  sent: number;
+  /** Called by the view as each snapshot lands, with its tick. */
+  onSnap: ((id: number) => void) | null;
+  /** The drawer's blend, for the HUD. */
+  interp: RemoteInterp | null;
 }
