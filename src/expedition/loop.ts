@@ -56,6 +56,9 @@ import { FieldMechs } from "./fieldMechs";
 import { ThreatMarks, type Mark } from "./threatMarks";
 import type { Prey } from "../pilot/quarry";
 import { FieldLoot, FIELD_LOOT_DEFAULTS, FIELD_LOOT_PARAMS } from "./loot";
+import { Hulks, HULK_DEFAULTS, HULK_PARAMS, HULK_GROUP, type Hulk } from "./hulks";
+import { SalvagePanel } from "../ui/salvagePanel";
+import type { Item } from "../items/item";
 import { itemName, type Drop } from "./drops";
 import { KitOrbs } from "./kitOrbs";
 import { KitOrbsDraw } from "./kitOrbsDraw";
@@ -77,7 +80,7 @@ import { RunThreat, RUN_THREAT_DEFAULTS, RUN_THREAT_PARAMS, RUN_THREAT_GROUP } f
 export const LOOP_DEFAULTS = {
   ...EXPEDITION_DEFAULTS, ...FUEL_DEFAULTS, ...RETURN_DEFAULTS, ...RADAR_DEFAULTS, ...SEEKER_DEFAULTS, ...CAMP_DEFAULTS, ...SWARM_CAMP_DEFAULTS,
   ...SITES_DEFAULTS, ...ROBOT_DEFAULTS, ...ROBOT_TEAR_DEFAULTS, ...THREAT_DEFAULTS, ...DEPTH_DEFAULTS, ...PAD_DEFAULTS, ...UNLOCK_DEFAULTS,
-  ...FIELD_LOOT_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS, ...LANCE_DEFAULTS,
+  ...FIELD_LOOT_DEFAULTS, ...HULK_DEFAULTS, ...INFANTRY_DEFAULTS, ...BANDIT_LOOK_DEFAULTS, ...WARBAND_DEFAULTS, ...BANDIT_DEFAULTS, ...COLUMN_DEFAULTS, ...FACTION_DEFAULTS, ...LANCE_DEFAULTS,
   ...QUEST_DEFAULTS, ...RUN_THREAT_DEFAULTS,
   ...FORT_LIFE_DEFAULTS,
   ...HUB_LIFE_DEFAULTS,
@@ -90,7 +93,7 @@ export type LoopValues = typeof LOOP_DEFAULTS;
 export const LOOP_PARAMS: Param[] = [
   ...RUN_THREAT_PARAMS, ...DEPTH_PARAMS, ...PAD_PARAMS, ...UNLOCK_PARAMS, ...THREAT_PARAMS, ...EXPEDITION_PARAMS, ...FUEL_PARAMS, ...RETURN_PARAMS, ...RADAR_PARAMS, ...SEEKER_PARAMS, ...CAMP_PARAMS, ...SWARM_CAMP_PARAMS,
   ...POI_PARAMS, ...SITES_PARAMS, ...SITE_PARAMS, ...SALVAGE_PARAMS, ...SALVAGE_FX_PARAMS, ...ROBOT_PARAMS, ...ROBOT_TEAR_PARAMS,
-  ...FIELD_LOOT_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...LANCE_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
+  ...FIELD_LOOT_PARAMS, ...HULK_PARAMS, ...FACTION_PARAMS, ...BANDIT_PARAMS, ...LANCE_PARAMS, ...COLUMN_PARAMS, ...INFANTRY_PARAMS, ...BANDIT_LOOK_PARAMS, ...WARBAND_PARAMS,
   ...QUEST_PARAMS,
   ...FORT_LIFE_PARAMS,
   ...HUB_LIFE_PARAMS,
@@ -107,7 +110,7 @@ export const LOOP_TOPICS = [
   { id: "pois", label: "POIs and salvage", groups: ["POI placement", "Pads", "Salvage", "Salvage heat", "Salvage: look", ...new Set(SITE_PARAMS.map((p) => p.group))] },
   { id: "threats", label: "Packs and raids", groups: THREAT_GROUPS },
   { id: "fortress", label: "Fortresses and hubs", groups: ["Fortress: layout", "Fortress: walls", "Fortress: salvage", "Fortress: gates", "Fortress: spawners", "Fortress: towers", "Fortress: garrison", "Fortress: waves", "Fortress: mechs", "Fortress: warlord", "Manufacturing hub: layout", "Manufacturing hub: salvage", "Manufacturing hub: fabricators", "Manufacturing hub: production", "Manufacturing hub: boss"] },
-  { id: "loot", label: "Loot and cargo", groups: ["Loot", "Loot labels", "Cargo", "Item value", "Loot rolls", "Loot slot mix"] },
+  { id: "loot", label: "Loot and cargo", groups: ["Loot", HULK_GROUP, "Loot labels", "Cargo", "Item value", "Loot rolls", "Loot slot mix"] },
   { id: "factions", label: "Factions and fights", groups: FACTION_GROUPS },
   { id: "raiders", label: "Bandits and war bands", groups: [...BANDIT_GROUPS, ...LANCE_GROUPS, "War band columns", "Bandits", "Bandits: guns", "Bandits: morale", "Bandits: stomp & bodies", "Bandits: dodge", "Bandits: look", "War band", "Raider guns", "Raider health", "Raider driving", "Raider wrecks"] },
   { id: "swarms", label: "Swarms", groups: ["Swarm camps", "Swarm camps: behaviour", "Unknown areas", "Robots", "Robots: attack", "Robots: tearing", "Robots: medium", "Robots: big ones", "Robots: beam", "Robots: hit parts", "Robots: big weak points"] },
@@ -188,6 +191,10 @@ export class ExpeditionLoop {
   readonly hud: ExpeditionHud;
   /** Scrap clumps, item drops, the loot panel and its sounds (loot.ts). */
   readonly loot: FieldLoot;
+  /** Hulks of beaten mechs to pull parts off (hulks.ts), and the panel that shows one (src/ui/salvagePanel.ts). */
+  readonly hulks: Hulks;
+  private salvage = new SalvagePanel();
+  private hulkOpen: Hulk | null = null;
   /** Contracts and high value targets (src/quests/questLoop.ts). */
   readonly quests: QuestLoop;
   /** The sensor's seekers (src/expedition/seekers.ts): the lab sets the modes from the loadout and cycles them. */
@@ -232,6 +239,8 @@ export class ExpeditionLoop {
   demoHold = false;
   /** E and the drops (Keith 2026-11-06): the drop E would take now, E last frame, this frame's grab, a press spent on a drop. */
   private eDrop: Drop | null = null;
+  /** The hulk E would open now. */
+  private eHulk: Hulk | null = null;
   private ePrev = false;
   private grab = false;
   private eSpent = false;
@@ -342,6 +351,9 @@ export class ExpeditionLoop {
     this.hud = new ExpeditionHud(this.radar.canvas);
     // Loot rolls by where it drops: the live depth (level, danger: rarity) and the salvage heat (rarity).
     this.loot = new FieldLoot(v, scene, field, bf.sfx.ctx, this.hud.lootSlot, this.exp, (x, z) => this.dropCtx(x, z));
+    this.hulks = new Hulks(v, this.loot.drops.seed ^ 0x4b1c, v);
+    this.salvage.onClose = () => this.closeHulk();
+    this.salvage.onPull = (item) => { if (this.hulkOpen) this.hulks.begin(this.hulkOpen, item, this.hulkFoot); };
     // Cargo limit (Keith 2026-11-01): a full cargo says so, and a spot whose pay doesn't fit won't strip.
     this.loot.onFull = (t) => this.hud.note(t, "#ffb347", 3);
     this.sites.salvage.canStrip = (sp) => this.exp.state !== "out" || this.exp.fits({ kind: "scrap", amount: this.sites.salvage.pay(sp), label: "" });
@@ -357,6 +369,8 @@ export class ExpeditionLoop {
     this.quests = new QuestLoop(v as never, {
       exp: this.exp, hud: this.hud, sites: this.sites, camps: this.camps, bandits: this.bandits, drops: this.loot.drops,
       dropCtx: (x, z) => this.dropCtx(x, z), depth: (x, z) => this.depth.depth(x, z),
+      hulk: (id, label, x, z, fitted, present) => { if (this.exp.state === "out" && this.hulks.add(id, label, x, z, fitted)) this.hulkBodies.set(id, present); },
+      hulkLeft: (id) => this.hulks.left(id),
       lead: () => { const b = convoy.bays[0]; return { x: b.x, z: b.z }; },
       blocked: (x, z) => blocked(x, z) || convoy.platforms.some((q) => Math.hypot(q.x - x, q.z - z) < 150),
     }, bf, scene, field, player);
@@ -387,17 +401,67 @@ export class ExpeditionLoop {
   setupFortMechs(s: RivalSetup) {
     this.fieldMechs.setup = s;
     this.fieldMechs.onEvent = (e) => {
-      this.hud.note("Bandit mech down", "#ffb347", 3);
       this.hotDrops(`banditmech:${e.id}`, this.v.lanceDrops, e.x, e.z);
+      this.mechDown(`banditmech:${e.id}`, "Bandit mech", e.x, e.z, e.fitted, e.present, 3);
       this.quests?.killed("bandit", e.x, e.z);
     };
     const m = this.forts.mechs;
     m.setup = s;
     m.onEvent = (e) => {
       const boss = e.role === "boss";
-      this.hud.note(boss ? "Warlord down" : "Bandit mech down", "#ffb347", boss ? 4 : 3);
       this.hotDrops(`fortmech:${e.id}`, boss ? this.v.warlordDrops : this.v.fortMechDrops, e.x, e.z);
+      this.mechDown(`fortmech:${e.id}`, boss ? "Warlord" : "Bandit mech", e.x, e.z, e.fitted, e.present, boss ? 4 : 3);
     };
+  }
+
+  /** A mech went down: its hulk to salvage (out on an expedition only), and the note. */
+  mechDown(id: string, label: string, x: number, z: number, fitted: readonly (Item | null)[], present: () => boolean, noteFor = 3) {
+    const h = this.exp.state === "out" ? this.hulks.add(id, label, x, z, fitted) : null;
+    if (h) this.hulkBodies.set(id, present);
+    this.hud.note(h ? `${label} down · E by its hulk: pull its parts (${h.parts.length})` : `${label} down`, "#ffb347", noteFor);
+  }
+
+  private hulkFoot = false;
+  /** Whether each hulk's wreck is still on the field (glue: the field mechs free their slots later). */
+  private hulkBodies = new Map<string, () => boolean>();
+  private closeHulk() { if (this.hulks.pulling) this.hulks.cancel(); this.hulkOpen = null; this.salvage.hide(); }
+
+  /**
+   * Mech salvage, one frame: the pull under way (from where the pilot or the mech stands), what came off or jammed,
+   * and the panel. from: who pulls (null: nobody can); near: the hulk in reach now.
+   */
+  private updateHulks(dt: number, from: { x: number; z: number } | null, foot: boolean, near: Hulk | null) {
+    const { hulks, exp } = this, lvl = Math.max(1, Math.round(this.fieldMechs.setup?.playerLevel?.() ?? 1));
+    for (const [id, here] of this.hulkBodies) if (!here()) { hulks.remove(id); this.hulkBodies.delete(id); }
+    // Walked off, got in or out, or left the field: the panel shuts.
+    if (this.hulkOpen && (near !== this.hulkOpen || foot !== this.hulkFoot)) this.closeHulk();
+    hulks.update(dt, from ? { x: from.x, z: from.z, onFoot: foot } : null, lvl);
+    for (const e of hulks.events) {
+      const h = e.hulk;
+      if (e.type === "pulled") {
+        const l = { kind: "item" as const, item: e.item, label: `${itemName(e.item)} (salvaged)` };
+        if (exp.fits(l)) { exp.add(l); this.hud.note(`Pulled ${itemName(e.item)} off the ${h.label.toLowerCase()} (${Math.round(e.chance * 100)}%) · at risk`, "#9dffb0", 3); }
+        else { this.loot.drops.place(e.item, h.x + 3, h.z); this.hud.note(`Pulled ${itemName(e.item)} · cargo full: it's on the sand`, "#ffcf7a", 3); }
+        this.sound.banked();
+      } else if (e.type === "jammed") {
+        const pay = Math.min(e.scrap, exp.scrapRoom);
+        if (pay > 0) exp.add({ kind: "scrap", amount: pay, label: `${h.label} hulk` });
+        this.hud.note(`${itemName(e.item)} jammed (${Math.round(e.chance * 100)}%): nothing more comes off · +${pay} scrap`, "#ff9a7a", 4);
+        this.sound.warn();
+        this.closeHulk();
+      }
+    }
+    hulks.events.length = 0;
+    const h = this.hulkOpen;
+    if (!h) return;
+    if (!h.parts.length) { this.closeHulk(); return; }
+    const pull = hulks.pulling;
+    this.salvage.update({
+      title: `${h.label} hulk`, pulls: h.pulls, onFoot: foot, fitted: this.loot.hud.fitted(),
+      rows: h.parts.map((item) => ({ item, chance: hulks.chance(h, item, { playerLevel: lvl, onFoot: foot }) })),
+      pulling: pull && pull.hulk === h ? { item: pull.item, share: pull.t / pull.time } : null,
+      full: (item) => !exp.fits({ kind: "item", item, label: "" }),
+    });
   }
 
   /** n items round (x, z), rolled as if from deep, hot ground (bosses and vaults), out on an expedition only. */
@@ -489,6 +553,7 @@ export class ExpeditionLoop {
     this.runThreat.set(0);
     this.lances.reset();
     this.fieldMechs.reset();
+    this.hulks.reset(); this.hulkBodies.clear(); this.closeHulk();
     this.blasts.length = 0;
     this.quests.reset();
     this.sites.keepClear(x, z, 190);
@@ -563,6 +628,15 @@ export class ExpeditionLoop {
     const eDown = inp.eHeld && !inp.demo;
     this.grab = inp.demo ? !!drop : eDown && !this.ePrev && !!this.eDrop;
     if (this.grab && !inp.demo) this.eSpent = true;
+    // Mech salvage (hulks.ts): E by a hulk opens its parts (when no drop is nearer), E again closes them.
+    const hulkFrom = exp.state === "out" && onSand && (foot ? !!lootAt.pilot : player.alive) ? from : null;
+    const hulk = hulkFrom ? this.hulks.nearest(hulkFrom.x, hulkFrom.z, foot ? v.hulkReachPilot : v.hulkReachMech) : null;
+    this.eHulk = hulk && !this.grab && (!this.eDrop || Math.hypot(hulk.x - from.x, hulk.z - from.z) < Math.hypot(this.eDrop.x - from.x, this.eDrop.z - from.z)) ? hulk : null;
+    if (eDown && !this.ePrev && !this.grab && !this.eSpent) {
+      if (this.hulkOpen) { this.closeHulk(); this.eSpent = true; }
+      else if (this.eHulk) { this.hulkOpen = this.eHulk; this.hulkFoot = foot; this.salvage.show(); this.eSpent = true; }
+    }
+    this.updateHulks(dt, hulkFrom, foot, hulk);
     if (!eDown) this.eSpent = false;
     this.ePrev = eDown;
     if (this.eSpent) inp = { ...inp, eHeld: false };
@@ -711,6 +785,8 @@ export class ExpeditionLoop {
     if (!prompt && exp.state === "out" && onSand) {
       if (s.active) prompt = `Stripping ${s.active.label}… ${Math.round(s.active.progress * 100)}%  (${foot ? "by hand: slower, quieter" : "loud"})`;
       else if (s.blocked) prompt = `Cargo full: ${s.blocked.label} pays ${s.pay(s.blocked)} scrap, ${Math.max(0, exp.room)} cells free · I: drop something`;
+      else if (this.hulkOpen) prompt = this.hulks.pulling ? `Pulling ${itemName(this.hulks.pulling.item)}… ${Math.round(this.hulks.pulling.t / this.hulks.pulling.time * 100)}%` : `Click a part to pull it · E: close`;
+      else if (this.eHulk) prompt = `E: salvage the ${this.eHulk.label.toLowerCase()} hulk (${this.eHulk.parts.length} part${this.eHulk.parts.length === 1 ? "" : "s"}${this.eHulk.pulls ? ` · ${this.eHulk.pulls} pulled` : ""})`;
       else if (this.eDrop) prompt = `E: take ${itemName(this.eDrop.item)}${s.inReach ? ` · step closer to ${s.inReach.label} to strip it` : ""}`;
       else if (s.inReach) prompt = `Hold E: strip ${s.inReach.label}${foot ? " by hand" : ""} (+${s.pay(s.inReach)} scrap, at risk until the crane has you)`;
     }

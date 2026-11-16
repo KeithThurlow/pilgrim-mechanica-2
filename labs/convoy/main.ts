@@ -669,6 +669,13 @@ function restart() {
     loop.lances.place(x, z, Math.max(1, Number(params.get("lance")) || 2), m, 0.3);
     carry.armed = true;
   }
+  // ?hulk[=N]: N bandit mechs (1) put down 25 m ahead and destroyed at once: their hulks to salvage (Keith 2026-11-16).
+  if (params.has("hulk")) {
+    const m = sim.pos, ang = p.heading;
+    loop.lances.place(m.x + Math.sin(ang) * 25, m.z + Math.cos(ang) * 25, Math.max(1, Number(params.get("hulk")) || 1), m, 0.3);
+    loop.fieldMechs.killOnPut = true;
+    carry.armed = true;
+  }
   // ?siege[=N]: out on the sand beside the workshop car, a robot pack of N (40) coming at the mech from 200 m off that
   // side, for the convoy's defence (Keith 2026-11-01); add ?warband for vehicles too.
   if (params.has("siege")) {
@@ -705,7 +712,7 @@ function restart() {
   const questKind = params.get("quest");
   if (questKind && (QUEST_FLAGS as string[]).includes(questKind)) loop.quests.force(questKind as (typeof QUEST_FLAGS)[number], true, hvtLair);
   hvtLair = null;
-  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
+  if (["out", "far", "lowfuel", "nearcamp", "crusher", "depth", "banditcamp", "clash", "warband", "lance", "hulk", "pad", "fortress", "hub", "siege"].some((f) => params.has(f))) loop.exp.add({ kind: "scrap", amount: 34, label: "Debris field" });
   if (params.has("pad")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 400, label: "Supply pod" });
   if (params.has("loot")) loop.exp.add({ kind: "scrap", amount: Number(params.get("loot")) || 50, label: "Supply pod" });
   // The run's threat level (runThreat.ts) set that high (m of depth) from the start, e.g. ?out&runthreat=1500.
@@ -718,7 +725,7 @@ function restart() {
   foot.reset();
   // ?onfoot: on foot beside the mech: parked in the left bay (unless a flag put the mech out on the sand).
   if (params.has("onfoot")) {
-    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "lance", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
+    const inField = ["out", "far", "lowfuel", "nearcamp", "crusher", "field", "depth", "banditcamp", "clash", "warband", "lance", "hulk", "pad", "fortress", "hub", "quest", "hvt", "siege"].some((f) => params.has(f));
     if (inField) { armedWhenOut = true; carry.armed = false; }
     else {
       if (!carry.onDeck) carry.putAboard(sim);

@@ -10,13 +10,14 @@
 import type * as THREE from "three/webgpu";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
+import type { Item } from "../items/item";
 import { FieldRival, type FieldRivalValues, type RivalSetup } from "../game/fieldRival";
 import { FORT_MECH_PAINT } from "./fortMechPosts";
 import { campMechs, mechGrade, type Lance, type LanceField, type LanceValues } from "./lances";
 import type { BanditCamps } from "./humans";
 import type { BanditCamp } from "./banditCamps";
 
-export type FieldMechEvent = { type: "banditMechDown"; id: string; from: "lance" | "camp"; x: number; y: number; z: number };
+export type FieldMechEvent = { type: "banditMechDown"; id: string; from: "lance" | "camp"; x: number; y: number; z: number; fitted: (Item | null)[]; present: () => boolean };
 
 interface Slot {
   rival: FieldRival;
@@ -28,11 +29,16 @@ interface Slot {
   hp: number;
 }
 
+/** Whether this slot still holds this wreck (the slot is freed or reused later). */
+function wreckOf(s: Slot) { const key = s.key, r = s.rival; return () => s.key === key && r.placed && !r.alive; }
+
 export class FieldMechs {
   setup: RivalSetup | null = null;
   onEvent: ((e: FieldMechEvent) => void) | null = null;
   /** Danger at a place with the run's threat in (the loop sets it); left out, a camp's own. Camp guards count and grade by it. */
   dangerAt: ((x: number, z: number) => number) | null = null;
+  /** Lab: every mech put on the field is destroyed at once (`?hulk`, a hulk to salvage). */
+  killOnPut = false;
   private slots: Slot[] = [];
   /** Camp guards killed this trip (they don't come back). */
   private dead = new Set<string>();
@@ -119,6 +125,8 @@ export class FieldMechs {
       } else {
         s.rival.arena.x = P.x; s.rival.arena.z = P.z; s.rival.arena.r = v.lanceArena;
       }
+      // ?hulk in the convoy lab: down as soon as it stands, for salvaging.
+      if (this.killOnPut && u.alive) u.damage(1e9, p, p.clone().set(0, 0, 1));
       s.hp = u.health;
       s.rival.step(dt, fight);
       s.rival.stepSummons(dt);
@@ -126,7 +134,7 @@ export class FieldMechs {
         s.rival.died = false;
         if (s.camp) this.dead.add(s.key);
         else if (s.lance) s.lance.n = Math.max(0, s.lance.n - 1);
-        this.onEvent?.({ type: "banditMechDown", id: s.key, from: s.camp ? "camp" : "lance", x: p.x, y: p.y, z: p.z });
+        this.onEvent?.({ type: "banditMechDown", id: s.key, from: s.camp ? "camp" : "lance", x: p.x, y: p.y, z: p.z, fitted: s.rival.fitted(), present: wreckOf(s) });
       }
     }
     // Wrecks of lance mechs left far behind: off the field (the slot is free again).
