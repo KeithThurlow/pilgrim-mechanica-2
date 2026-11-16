@@ -2,6 +2,7 @@
 // contracts.ts, hvt.ts and tow.ts; here: kills from the robot swarm and the bandit camps, stripped spots, the run's
 // banking and losses, offers placed on real POIs, camps, lairs and open sand, the HVT's mech, payouts, notes, the
 // hulk on its cable and the pods, beacons, radar diamonds and edge marks, and the move-command slowdown for the lab.
+import type { Item } from "../items/item";
 import * as THREE from "three/webgpu";
 import type { Param } from "../core/tweaks";
 import type { Battlefield } from "../game/battlefield";
@@ -45,6 +46,10 @@ export interface QuestWorld {
   bandits: BanditField;
   drops: DropField;
   dropCtx: (x: number, z: number) => DropContext;
+  /** A rival mech went down: leave its hulk to salvage (src/expedition/hulks.ts). */
+  hulk?: (id: string, label: string, x: number, z: number, fitted: (Item | null)[], present: () => boolean) => void;
+  /** Parts left on a hulk (its wreck stays while there are). */
+  hulkLeft?: (id: string) => number;
   depth: (x: number, z: number) => number;
   /** Where offers measure from (the convoy's lead car). */
   lead: () => { x: number; z: number };
@@ -68,6 +73,8 @@ export class QuestLoop {
   readonly board: ContractBoard;
   readonly lairs: Lairs;
   readonly tow: TowCable;
+  /** The HVT's hulk (its wreck lies while it has parts left). */
+  private hulkId = "";
   readonly hvt: HvtMech;
   /** Made when the lab hands over the look (setup). */
   draw: QuestDraw | null = null;
@@ -232,10 +239,12 @@ export class QuestLoop {
         board.hvtKilled(l.id);
         const ctx = w.dropCtx(p.x, p.z);
         for (let k = 0, n = Math.round(v.hvtDrops); k < n; k++) w.drops.roll(`hvt:${l.id}:${k}`, 1, p.x, p.z, ctx, { rarity: k === 0 ? "epic" : "rare", level: hvt.level });
-        this.note(`${l.name} destroyed`, "#ffd27a", 4);
+        this.hulkId = `hvt:${l.id}`;
+        w.hulk?.(this.hulkId, l.name, p.x, p.z, hvt.fitted(), () => hvt.placed && !hvt.alive);
+        this.note(`${l.name} destroyed${w.hulk ? " · E by its hulk: pull its parts" : ""}`, "#ffd27a", 4);
         this.wreckT = v.hvtWreckFor;
       }
-      if (!hvt.unit?.alive && (this.wreckT -= dt) <= 0) hvt.despawn();
+      if (!hvt.unit?.alive && (this.wreckT -= dt) <= 0 && !(w.hulkLeft?.(this.hulkId) ?? 0)) hvt.despawn();
     }
     // Board events: notes and pay.
     for (const e of board.events) {

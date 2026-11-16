@@ -12,7 +12,7 @@ export const FORT_MECH_DEFAULTS = {
   fortMechAi: 0, fortFlankAi: 0, warlordAi: 1,
   fortMechHull: 1, warlordHull: 1.3,
   fortMechArena: 30, fortMechWake: 110,
-  warlordDrops: 5, fortMechDrops: 1,
+  warlordDrops: 5, fortMechDrops: 0,
 };
 export type FortMechValues = typeof FORT_MECH_DEFAULTS;
 const G = "Fortress: mechs", B = "Fortress: warlord";
@@ -27,7 +27,7 @@ export const FORT_MECH_PARAMS: Param[] = [
   { key: "fortMechHull", label: "Yard mechs' hull ×", min: 0.2, max: 5, step: 0.05, group: G, tip: "On top of their level's hull share", onRelease: true },
   { key: "fortMechArena", label: "Yard mechs fight within (m of their post)", min: 8, max: 120, step: 1, group: G },
   { key: "fortMechWake", label: "They fight the mech within (m)", min: 20, max: 300, step: 5, group: G, tip: "Once their yard is alert" },
-  { key: "fortMechDrops", label: "Items a yard mech or flanker drops", min: 0, max: 6, step: 1, group: G },
+  { key: "fortMechDrops", label: "Items a yard mech or flanker drops", min: 0, max: 6, step: 1, group: G, tip: "Random items on top of its hulk (mech kills are salvaged instead, Loot and cargo › Mech salvage; was 1)" },
   { key: "warlordAi", label: "Warlord's rival level", min: 0, max: 2, step: 1, group: B, tip: AI_TIP, onRelease: true },
   { key: "warlordUp", label: "Warlord's items vs yours", min: -10, max: 20, step: 1, group: B, tip: UP_TIP, onRelease: true },
   { key: "warlordHull", label: "Warlord's hull ×", min: 0.2, max: 6, step: 0.05, group: B, tip: "On top of its level's hull share (Veteran 1.15)", onRelease: true },
