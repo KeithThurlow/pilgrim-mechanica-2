@@ -5,7 +5,7 @@ import { blastKick, knockOf, type Kick } from "../game/blastLaunch";
 import * as THREE from "three/webgpu";
 import type { Hittable, SplashOpts } from "../game/battlefield";
 import type { HitSurface } from "../fx/minigun";
-import { DOWN, type InfantrySwarm } from "./infantry";
+import { DOWN, INFANTRY_MAX, type InfantrySwarm } from "./infantry";
 import { inBand, sheetCircle, type PenMaterial, type Sheet, type SheetHit } from "../game/sheet";
 import { SwarmCull, type Owner, type Register } from "../game/register";
 
@@ -22,6 +22,9 @@ export class InfantryTarget implements Hittable, Owner {
   readonly cull = new SwarmCull();
 
   /** look: what the swarm is made of (the humanoid robots, src/combat/droids.ts: metal that stops rounds like a cutter). */
+  /** Who a splash already measured (by stamp). */
+  private readonly seen = new Uint32Array(INFANTRY_MAX);
+  private stampN = 0;
   constructor(private swarm: InfantrySwarm, readonly team: number, look: { name: string; surface: HitSurface; material: PenMaterial } = { name: "bandits", surface: "flesh", material: "flesh" }) {
     this.name = look.name; this.surface = look.surface; this.pen = look.material;
   }
@@ -82,11 +85,14 @@ export class InfantryTarget implements Hittable, Owner {
       n++;
     };
     const only = this.cull.round(at.x, at.z, radius);
+    const stamp = ++this.stampN, seen = this.seen;
     for (let j = 0, m = only ? only.length : sw.hi; j < m; j++) {
       const i = only ? only[j] : j;
-      if (sw.state[i] < DOWN) hit(i, false);
+      if (sw.state[i] < DOWN) { seen[i] = stamp; hit(i, false); }
     }
-    if (o?.blast) for (let i = 0; i < sw.hi; i++) if (sw.state[i] === DOWN) hit(i, true);
+    // The knocked-down (not in the register), and those who were when it was built and got up since (blasts knock
+    // crowds flat, src/game/blastLaunch.ts, so plenty get up between a register build and the next blast).
+    if (o?.blast) for (let i = 0; i < sw.hi; i++) if (seen[i] !== stamp && sw.state[i] <= DOWN) hit(i, sw.state[i] === DOWN);
     return n;
   }
 
