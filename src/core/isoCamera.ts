@@ -1,6 +1,6 @@
 // The game camera: high isometric view, fixed facing so W is always up the screen, following a target smoothly.
 // Scroll zooms between three framings: in close (45° at 12 m), the game view (50° at 40 m, the old project's
-// decision) and far out (55° at 80 m, Keith 2026-10-24: the mech about half its game-view size).
+// decision) and far out (53° at 60 m; the old 80 m is the boss zoom, off by default).
 import * as THREE from "three/webgpu";
 import type { Param } from "./tweaks";
 
@@ -9,8 +9,13 @@ export const ISO_DEFAULTS = {
   camDist: 40,
   camNearPitch: 45,
   camNearDist: 12,
-  camFarPitch: 55,
-  camFarDist: 80,
+  camFarPitch: 53,
+  camFarDist: 60,
+  // Boss zoom (Keith 2026-11-16: the old 80 m max was a bit too far for normal play): a wider max, off unless a boss
+  // fight or `?set=camBoss:1` turns it on. Nothing switches it on yet.
+  camBoss: 0,
+  camBossPitch: 55,
+  camBossDist: 80,
   camFollow: 6,
   camYaw: 0,
   camFov: 40,
@@ -35,7 +40,10 @@ export const ISO_PARAMS: Param[] = [
   { key: "camNearPitch", label: "Zoomed in pitch (°)", min: 10, max: 89, step: 1, group: "Camera" },
   { key: "camNearDist", label: "Zoomed in distance (m)", min: 4, max: 60, step: 0.5, group: "Camera" },
   { key: "camFarPitch", label: "Zoomed out pitch (°)", min: 20, max: 89, step: 1, group: "Camera" },
-  { key: "camFarDist", label: "Zoomed out distance (m)", min: 20, max: 300, step: 1, group: "Camera" },
+  { key: "camFarDist", label: "Zoomed out max distance (m)", min: 20, max: 300, step: 1, group: "Camera" },
+  { key: "camBoss", label: "Boss zoom (0 off, 1 on)", min: 0, max: 1, step: 1, group: "Camera", tip: "On: scroll zooms out to the boss distance below instead of stopping at the normal max. Unused by default; a boss fight can switch it on" },
+  { key: "camBossPitch", label: "Boss zoom pitch (°)", min: 20, max: 89, step: 1, group: "Camera" },
+  { key: "camBossDist", label: "Boss zoom distance (m)", min: 20, max: 300, step: 1, group: "Camera" },
   { key: "camFollow", label: "Follow speed", min: 0.5, max: 30, step: 0.5, group: "Camera" },
   { key: "camYaw", label: "Facing (°)", min: -180, max: 180, step: 1, group: "Camera", tip: "0 = looking north (+Z); W always moves up the screen" },
   { key: "camSouth", label: "Mech higher on screen (share of distance)", min: 0, max: 0.4, step: 0.01, group: "Camera", tip: "Shifts the view south so the mech sits higher: more view behind it, less ahead. 0 = centred" },
@@ -65,7 +73,7 @@ export class IsoCamera {
       if (!this.enabled) return;
       e.preventDefault();
       // Even steps in log space, so each notch feels the same near and far.
-      this.distTarget = THREE.MathUtils.clamp(this.distTarget * Math.exp(Math.sign(e.deltaY) * 0.14), this.v.camNearDist, this.v.camFarDist);
+      this.distTarget = THREE.MathUtils.clamp(this.distTarget * Math.exp(Math.sign(e.deltaY) * 0.14), this.v.camNearDist, this.maxDist);
     }, { passive: false });
     // Pinch zoom on touch screens: two fingers on the view (not the sticks), the distance scaled by how far they spread.
     const fingers = new Map<number, { x: number; y: number }>();
@@ -80,18 +88,21 @@ export class IsoCamera {
       const f = fingers.get(e.pointerId);
       if (!f) return;
       f.x = e.clientX; f.y = e.clientY;
-      if (fingers.size === 2 && pinch0 > 10) this.distTarget = THREE.MathUtils.clamp(dist0 * pinch0 / Math.max(10, span()), this.v.camNearDist, this.v.camFarDist);
+      if (fingers.size === 2 && pinch0 > 10) this.distTarget = THREE.MathUtils.clamp(dist0 * pinch0 / Math.max(10, span()), this.v.camNearDist, this.maxDist);
     });
     const lift = (e: PointerEvent) => { fingers.delete(e.pointerId); pinch0 = 0; };
     el.addEventListener("pointerup", lift);
     el.addEventListener("pointercancel", lift);
   }
 
+  /** The furthest the zoom goes: the normal max, or the boss zoom's when it is on. */
+  get maxDist() { return this.v.camBoss > 0.5 ? Math.max(this.v.camFarDist, this.v.camBossDist) : this.v.camFarDist; }
+
   /** Jump the zoom to a distance (m), e.g. for review shots. */
-  setDistance(d: number) { this.dist = this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.v.camFarDist); }
+  setDistance(d: number) { this.dist = this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.maxDist); }
 
   /** Glide the zoom to a distance (m) (the pilot getting out zooms in, getting back in zooms out). */
-  zoomTo(d: number) { this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.v.camFarDist); }
+  zoomTo(d: number) { this.distTarget = THREE.MathUtils.clamp(d, this.v.camNearDist, this.maxDist); }
   /** Where the zoom is heading (m). */
   get zoomTarget() { return this.distTarget; }
 
@@ -101,6 +112,10 @@ export class IsoCamera {
     if (d <= v.camDist) {
       const t = THREE.MathUtils.clamp((L(d) - L(v.camNearDist)) / Math.max(1e-3, L(v.camDist) - L(v.camNearDist)), 0, 1);
       return THREE.MathUtils.lerp(v.camNearPitch, v.camPitch, t);
+    }
+    if (d > v.camFarDist) {
+      const t = THREE.MathUtils.clamp((L(d) - L(v.camFarDist)) / Math.max(1e-3, L(Math.max(v.camBossDist, v.camFarDist + 1)) - L(v.camFarDist)), 0, 1);
+      return THREE.MathUtils.lerp(v.camFarPitch, v.camBossPitch, t);
     }
     const t = THREE.MathUtils.clamp((L(d) - L(v.camDist)) / Math.max(1e-3, L(v.camFarDist) - L(v.camDist)), 0, 1);
     return THREE.MathUtils.lerp(v.camPitch, v.camFarPitch, t);
@@ -113,7 +128,7 @@ export class IsoCamera {
     if (!this.enabled) return;
     if (!this.started) { this.focus.copy(target); this.started = true; }
     this.focus.lerp(target, 1 - Math.exp(-this.v.camFollow * dt));
-    this.distTarget = THREE.MathUtils.clamp(this.distTarget, this.v.camNearDist, this.v.camFarDist);
+    this.distTarget = THREE.MathUtils.clamp(this.distTarget, this.v.camNearDist, this.maxDist);
     this.dist += (this.distTarget - this.dist) * (1 - Math.exp(-10 * dt));
     // At speed: ahead along the motion, and further out.
     const v = this.v, mx = motion?.x ?? 0, mz = motion?.z ?? 0, s = Math.hypot(mx, mz);

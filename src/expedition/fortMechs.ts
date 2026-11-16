@@ -12,13 +12,14 @@
 import type * as THREE from "three/webgpu";
 import type { Battlefield } from "../game/battlefield";
 import type { MechUnit } from "../game/mechUnit";
+import type { Item } from "../items/item";
 import { FieldRival, type FieldRivalValues, type RivalSetup } from "../game/fieldRival";
 import type { Layout } from "../pois/fortress";
 import { FORT_MECH_PAINT, WARLORD_PAINT, fortMechPosts, type FortMechPost, type FortMechRole, type FortMechValues } from "./fortMechPosts";
 
 export { FORT_MECH_DEFAULTS, FORT_MECH_PARAMS, fortMechPosts } from "./fortMechPosts";
 
-export type FortMechEvent = { type: "fortMechDown"; poi: string; id: string; role: FortMechRole; yard: number; x: number; y: number; z: number };
+export type FortMechEvent = { type: "fortMechDown"; poi: string; id: string; role: FortMechRole; yard: number; x: number; y: number; z: number; fitted: (Item | null)[]; present: () => boolean };
 
 interface Slot { rival: FieldRival; post: FortMechPost | null; pending: boolean; hp: number }
 
@@ -77,7 +78,7 @@ export class FortMechs {
         s.rival.died = false;
         this.dead.add(post.id);
         const p = u.sim.pelvis;
-        this.onEvent?.({ type: "fortMechDown", poi: fort.poi, id: post.id, role: post.role, yard: post.yard, x: p.x, y: p.y, z: p.z });
+        this.onEvent?.({ type: "fortMechDown", poi: fort.poi, id: post.id, role: post.role, yard: post.yard, x: p.x, y: p.y, z: p.z, fitted: s.rival.fitted(), present: () => s.post === post && s.rival.placed && !s.rival.alive });
       }
     }
   }

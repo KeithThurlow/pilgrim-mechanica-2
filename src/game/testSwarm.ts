@@ -17,8 +17,8 @@ export const TEST_SWARM_DEFAULTS = {
   tsCount: 36,
   tsHp: 12,
   tsArmour: 0,
-  tsDensity: 0.2,
-  tsRadius: 0.5,
+  tsDensity: 0.1,
+  tsRadius: 1,
   tsHeight: 1,
   tsMaterial: 0,
   tsShape: 0,
@@ -36,7 +36,7 @@ export const TEST_SWARM_PARAMS: Param[] = [
   { key: "tsCount", label: "Bodies", min: 0, max: 200, step: 1, group: G, onRelease: true, tip: "0 takes the pen away" },
   { key: "tsHp", label: "Health each", min: 1, max: 2000, step: 1, group: G },
   { key: "tsArmour", label: "Armour each", min: 0, max: 20, step: 0.5, group: G, tip: "Flat armour per hit (src/game/armour.ts)" },
-  { key: "tsDensity", label: "Density (bodies per m²)", min: 0.02, max: 1, step: 0.01, group: G, onRelease: true, tip: "0.2 is the balance model's camp swarm; spacing about 1/√density" },
+  { key: "tsDensity", label: "Density (bodies per m²)", min: 0.02, max: 1, step: 0.01, group: G, onRelease: true, tip: "0.1 is the balance model's camp swarm; spacing about 1/√density" },
   { key: "tsRadius", label: "Body hit radius (m)", min: 0.2, max: 2, step: 0.05, group: G, onRelease: true },
   { key: "tsHeight", label: "Body height (m)", min: 0.4, max: 4, step: 0.1, group: G },
   { key: "tsMaterial", label: "Made of (0 scrapper, 1 cutter, 2 excavator, 3 flesh)", min: 0, max: 3, step: 1, group: G, tip: "What a piercing round loses going through one (the Penetration sliders)" },
@@ -52,7 +52,7 @@ export const TEST_SWARM_PARAMS: Param[] = [
 /** Tiers: slider sets for the preset buttons. Fodder is the balance model's swarm (targets() "swarm": 36 scrappers
  *  at 0.2 a m², 12 hp, no armour), so the lab's model column and the live numbers measure the same thing. */
 export const TEST_SWARM_TIERS: { id: string; name: string; tip: string; set: Partial<TestSwarmValues> }[] = [
-  { id: "fodder", name: "Fodder", tip: "Scrappers as the balance model's swarm: 36, 12 hp, no armour, 0.2 a m²", set: { tsCount: 36, tsHp: 12, tsArmour: 0, tsDensity: 0.2, tsRadius: 0.5, tsHeight: 1, tsMaterial: 0, tsShape: 0 } },
+  { id: "fodder", name: "Fodder", tip: "Scrappers as the balance model's swarm: 36, 12 hp, no armour, 0.1 a m²", set: { tsCount: 36, tsHp: 12, tsArmour: 0, tsDensity: 0.1, tsRadius: 1, tsHeight: 1, tsMaterial: 0, tsShape: 0 } },
   { id: "spread", name: "Fodder, spread", tip: "The same scrappers loose: 24 at 0.05 a m² (about 4.5 m apart)", set: { tsCount: 24, tsHp: 12, tsArmour: 0, tsDensity: 0.05, tsRadius: 0.5, tsHeight: 1, tsMaterial: 0, tsShape: 0 } },
   { id: "horde", name: "Horde", tip: "Dense chaff: 80 at 0.5 a m², 6 hp", set: { tsCount: 80, tsHp: 6, tsArmour: 0, tsDensity: 0.5, tsRadius: 0.4, tsHeight: 0.8, tsMaterial: 0, tsShape: 0 } },
   { id: "armoured", name: "Armoured", tip: "A tough pack: 24 at 0.15 a m², 60 hp, armour 6 (light rounds lose most)", set: { tsCount: 24, tsHp: 60, tsArmour: 6, tsDensity: 0.15, tsRadius: 0.6, tsHeight: 1.2, tsMaterial: 1, tsShape: 0 } },
