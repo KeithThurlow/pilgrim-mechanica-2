@@ -35,7 +35,7 @@ export const PHONE_PRESET: Record<string, number> = {
   radarHz: 10,             // the scope's canvas: 30
   // Crater fitting (src/world/craters.ts), the dearest single thing in a siege's worst ticks (spike profile 2026-11-16):
   // a volley's craters land over a few more ticks instead of in one.
-  craterTickWork: 4000,    // 12000 on the PC
+  craterTickWork: 3000,    // 12000 on the PC
 };
 
 /** The phone preset over a system's defaults, where they're declared, so values read before any panel is built (the
