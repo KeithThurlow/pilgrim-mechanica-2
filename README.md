@@ -6,7 +6,7 @@
 cd C:\Users\thurl\Development\pilgrim-mechanica-2; npm run play
 ```
 
-(bash: `cd ~/Development/pilgrim-mechanica-2 && npm run play`.) Add `-- --dev` for the hot-reload dev server instead of a build. If `main` has local edits it stops rather than overwrite them.
+(bash: `cd ~/Development/pilgrim-mechanica-2 && npm run play`.) Add `-- --dev` for the hot-reload dev server instead of a build. If `main` has local edits it stops rather than overwrite them. Each run first stops any earlier play or dev server (a node process on ports 4173-4189 or 5173-5189) and always serves on the same address, http://localhost:4173 (`--dev`: 5173), so saved inventory and sliders carry over between runs.
 
 A mech salvage game in the browser: a convoy village rolling across endless dunes, salvage runs against its range,
 swarms closing in. Three.js (WebGPU), TypeScript, Vite.
