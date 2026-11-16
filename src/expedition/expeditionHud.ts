@@ -2,13 +2,30 @@
 // out m:ss), "Home m:ss" (the predicted return time) and "Fuel m:ss" with a bar (amber, then red, when fuel isn't
 // comfortably above the way home), the at-risk list in amber while out (a lock once banked), the convoy's scrap, and
 // the recall prompt with its hold bar. Top centre: the salvage prompt and the big notes (banked, recovered, lost).
-// A full-screen fade for the recovery.
+// A full-screen fade for the recovery. Above the radar, the threat gauge (Keith 2026-11-16): the run's threat level,
+// a bar for the way to the next level, whether it is rising, slowed (heading home), holding or falling (in convoy
+// range), and how far convoy range is; it flashes when the level goes up.
 import type { Expedition } from "./expedition";
 import { clock } from "./returnPoint";
 
 export const LOCK = `<svg width="12" height="13" viewBox="0 0 12 13" style="vertical-align:-1px"><rect x="1" y="5.5" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M3.3 5.5V4a2.7 2.7 0 0 1 5.4 0v1.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`;
 const SEEK = "#9fd8ff";
 const COL = { ok: "#cfe9df", amber: "#ffb347", red: "#ff6a4a", dim: "#9a958c" };
+
+/** The threat gauge's frame (loop.ts threatHud). */
+export interface ThreatHud {
+  /** The threat as an item level, unrounded. */
+  level: number;
+  /** Where it is within its level (0..1). */
+  share: number;
+  /** Metres of depth. */
+  m: number;
+  trend: "rising" | "slowed" | "holding" | "falling";
+  /** Change, m/s. */
+  rate: number;
+  /** Metres to convoy range (where it starts falling); 0 in range. */
+  toRange: number;
+}
 
 export interface HudFrame {
   exp: Expedition;
@@ -29,7 +46,7 @@ export interface HudFrame {
   /** Distance from the road and its ring, while out. */
   depth?: { m: number; live: number; ring: string } | null;
   /** The run's threat level (runThreat.ts): its item level, metres of depth, and whether it is rising or falling. */
-  threat?: { level: number; m: number; falling: boolean; rising: boolean } | null;
+  threat?: ThreatHud | null;
   /** The nearest extraction pad: distance, what calling it costs and who pays, and the call's state. */
   pad?: { dist: number; quote: { fee: number; wait: number; ok: boolean; reason: string }; state: string; remaining: number; text: string } | null;
   /** Salvage heat and its thresholds (the meter shows while it's above zero). */
@@ -41,6 +58,10 @@ export interface HudFrame {
 export class ExpeditionHud {
   readonly root = document.createElement("div");
   private col = document.createElement("div");
+  private stack = document.createElement("div");
+  private gauge = document.createElement("div");
+  private gaugeLevel = 0;
+  private gaugeFlash = 0;
   private info = document.createElement("div");
   /** Where the loot panel goes (it draws itself). */
   readonly lootSlot = document.createElement("div");
@@ -68,7 +89,15 @@ export class ExpeditionHud {
     // The column: the loop's lines, then the loot panel (src/expedition/lootHud.ts: at risk, the count-in, the bank).
     this.col.className = "exp-card"; // phones: hidden unless the touch menu's Info is on (lab.css)
     this.col.append(this.questSlot, this.info, this.lootSlot);
-    this.root.append(radar, this.col);
+    // The threat gauge sits on the radar, outside the info card so phones show it too.
+    Object.assign(this.stack.style, { display: "flex", flexDirection: "column", gap: "6px", alignItems: "stretch" } as CSSStyleDeclaration);
+    Object.assign(this.gauge.style, {
+      background: "rgba(10, 14, 14, 0.72)", padding: "6px 9px 7px", borderRadius: "6px", minWidth: "150px", display: "none",
+      fontVariantNumeric: "tabular-nums", transition: "box-shadow 0.25s",
+    } as CSSStyleDeclaration);
+    this.gauge.className = "exp-threat";
+    this.stack.append(this.gauge, radar);
+    this.root.append(this.stack, this.col);
     document.body.appendChild(this.root);
 
     Object.assign(this.top.style, {
@@ -86,6 +115,37 @@ export class ExpeditionHud {
     Object.assign(this.fadeText.style, { font: "600 18px system-ui, sans-serif", letterSpacing: "0.12em", color: "#cfe9df", textTransform: "uppercase" });
     this.fadeEl.append(this.fadeText);
     document.body.appendChild(this.fadeEl);
+  }
+
+  /** The threat gauge (see the header). */
+  private drawGauge(dt: number, t: ThreatHud | null) {
+    const g = this.gauge;
+    if (!t) { if (g.style.display !== "none") g.style.display = "none"; this.gaugeLevel = 0; return; }
+    g.style.display = "block";
+    const lv = Math.max(1, Math.floor(t.level + 1e-6));
+    if (this.gaugeLevel && lv > this.gaugeLevel) this.gaugeFlash = 1.4;
+    this.gaugeLevel = lv;
+    this.gaugeFlash = Math.max(0, this.gaugeFlash - dt);
+    const falling = t.trend === "falling";
+    const col = falling ? "#7fe0a8" : t.m >= 1500 ? COL.red : t.m >= 600 ? "#ff9a3c" : COL.amber;
+    const surging = t.trend === "rising" && t.rate > 3;
+    const trend = falling ? "▼ FALLING" : surging ? "▲▲ SURGING" : t.trend === "rising" ? "▲ RISING" : t.trend === "slowed" ? "△ SLOWED" : "■ HOLDING";
+    const trendCol = falling ? "#7fe0a8" : t.trend === "slowed" || t.trend === "holding" ? COL.dim : col;
+    // The rising arrows pulse with the pace; the slowed one stays still.
+    const pulse = t.trend === "rising" ? 0.65 + 0.35 * Math.abs(Math.sin(this.time * (surging ? 9 : 4))) : 1;
+    const range = t.toRange >= 1000 ? `${(t.toRange / 1000).toFixed(1)} km` : `${Math.round(t.toRange)} m`;
+    const sub = falling ? "in convoy range: cooling off"
+      : t.trend === "slowed" ? `heading home · convoy range ${range}`
+      : surging ? `deeper than ever · convoy range ${range}`
+      : `falls only in convoy range · ${range}`;
+    const fl = this.gaugeFlash, k = Math.round(Math.max(0, Math.min(1, t.share)) * 100);
+    g.style.boxShadow = fl > 0 ? `0 0 ${Math.round(18 * Math.min(1, fl))}px ${col}, inset 0 0 0 1px ${col}` : `inset 3px 0 0 ${col}`;
+    g.innerHTML = `<div style="display:flex;align-items:baseline;gap:8px">`
+      + `<span style="font-size:11px;letter-spacing:0.12em;color:${COL.dim}">THREAT</span>`
+      + `<span style="font:800 ${fl > 0 ? 26 : 22}px/1 system-ui, 'Segoe UI', sans-serif;color:${col}">${lv}</span>`
+      + `<span style="margin-left:auto;font-size:11px;letter-spacing:0.08em;color:${trendCol};opacity:${pulse.toFixed(2)}">${trend}</span></div>`
+      + `<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:4px 0 3px"><div style="height:100%;width:${k}%;background:${col};border-radius:3px"></div></div>`
+      + `<div style="font-size:10px;color:${COL.dim}">${sub}</div>`;
   }
 
   /** A big note top centre for a few seconds (a raid coming). */
@@ -118,13 +178,6 @@ export class ExpeditionHud {
     } else if (fuelOn) lines.push(`<div style="font-size:17px;color:${COL.dim}">Fuel ${clock(f.fuelLeft)}</div>`);
     const w = Math.round(Math.max(0, Math.min(1, f.fuelShare)) * 100);
     if (fuelOn) lines.push(`<div style="height:5px;background:#ffffff1c;border-radius:3px;margin:3px 0 6px"><div style="height:100%;width:${w}%;background:${e.state === "out" ? warnCol : COL.ok};border-radius:3px"></div></div>`);
-    if (f.threat) {
-      const t = f.threat, lv = Math.max(1, Math.round(t.level)), k = Math.min(1, t.m / 3000) * 100;
-      const col = t.falling ? COL.ok : t.m >= 1500 ? COL.red : t.m >= 600 ? "#ff9a3c" : COL.amber;
-      const trend = t.falling ? " ▼ falling" : t.rising ? " ▲" : "";
-      lines.push(`<div style="font-size:12px;color:${col};margin-top:2px;letter-spacing:0.08em">THREAT ${lv}${trend}</div>`
-        + `<div style="height:4px;background:#ffffff1c;border-radius:2px;margin:2px 0 4px"><div style="height:100%;width:${k}%;background:${col};border-radius:2px"></div></div>`);
-    }
     if (f.depth) lines.push(`<div style="font-size:11px;color:${COL.dim}">${f.depth.ring.toUpperCase()} · ${Math.round(f.depth.m)} m from the road${Math.abs(f.depth.live - f.depth.m) > 20 ? ` · ${Math.round(f.depth.live)} m live` : ""}</div>`);
     if (f.pad) {
       const p = f.pad, col = p.state !== "idle" ? "#8fd0ff" : p.quote.reason === "locked" ? COL.dim : p.quote.ok ? COL.ok : COL.red;
@@ -146,6 +199,7 @@ export class ExpeditionHud {
       if (k > 0) lines.push(`<div style="height:4px;background:#ffffff1c;border-radius:2px;margin-top:2px"><div style="height:100%;width:${k}%;background:${COL.red};border-radius:2px"></div></div>`);
     }
     this.info.innerHTML = lines.join("");
+    this.drawGauge(dt, f.threat ?? null);
 
     // Top: the salvage prompt, and a note when a run ends.
     this.promptEl.textContent = f.prompt;
