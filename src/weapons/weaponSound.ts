@@ -7,7 +7,7 @@ import type { Sfx } from "../audio/sfx";
 import type { WeaponValues } from "./tuning";
 import { sampleBank, sampleBankOf } from "../audio/sampleBank";
 
-export type WeaponSound = "rail" | "railCharge" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "swordRing" | "bulletMetal" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
+export type WeaponSound = "rail" | "railCharge" | "railBoom" | "railCrack" | "railRoll" | "rocket" | "blast" | "mortar" | "cannon" | "clipOut" | "clipIn" | "swordSwing" | "swordHit" | "swordBlock" | "swordSmash" | "swordScrape" | "swordRing" | "bulletMetal" | "blastTail" | "blastBoom" | import("./guns").RoundGun | "breach";
 
 export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   const S = new Synth(sfx.rate);
@@ -18,6 +18,27 @@ export function addWeaponSounds(sfx: Sfx, v: WeaponValues) {
   // bright noise), a heavy thump under it and a low rolling boom; no beam whine on the shot.
   sfx.addSound("rail", variants(2, 41, (r) => S.mix(S.tick(r, 0.03, 1), S.noise(r, 0.06, 7000, 0.9, 0.0002), S.delay(S.noise(r, 0.05, 4200, 0.5, 0.0004), 0.012),
     S.thump(0.55, 95, 26, 1.25), S.delay(S.lowPass(S.noise(r, 1.1, 420, 0.55, 0.01), 700), 0.03))), () => v.railLevel);
+  // The sonic boom (Keith 2026-11-16: "it's massively exceeding the speed of sound ... it should have some effects that
+  // really communicate that it's loud and fast"). A supersonic body drags an N-wave behind it: a near-instant jump in
+  // pressure, a straight fall to below the air's, and a near-instant step back, heard as a double bang a few ms apart.
+  // railBoom (at the muzzle): the double bang, a split-second of bright torn air, a deep chest thump and a short low
+  // rumble; railCrack (where the slug ends): a whip crack, the shock passing; railRoll (later, off the ground at the
+  // end): the thunder rolling back off the dunes, long, dark and surging.
+  const nwave = (len: number, gain: number) => {
+    const s = new Float32Array(S.n(len)), n = s.length;
+    for (let i = 0; i < n; i++) s[i] = gain * (1 - (2 * i) / Math.max(1, n - 1));
+    return s;
+  };
+  sfx.addSound("railBoom", variants(2, 47, (r) => S.mix(
+    nwave(0.006, 1.6), S.delay(nwave(0.005, 1.1), 0.011 + r() * 0.004),
+    S.band(r, 0.09, 1800, 9000, 1.1, 0.0002, -70), S.scale(S.tick(r, 0.04, 1), 0.8),
+    S.thump(0.8, 70 + r() * 8, 24, 1.4), S.delay(S.thump(0.5, 48, 22, 0.8), 0.02),
+    S.delay(S.swell(r, S.lowPass(S.noise(r, 1.4, 240, 0.9, 0.02), 380), 0.08, 0.06, 0.16, 2, 8), 0.02))), () => v.railBoomLevel);
+  sfx.addSound("railCrack", variants(3, 48, (r) => S.mix(nwave(0.004, 1.2), S.delay(nwave(0.004, 0.8), 0.007 + r() * 0.003),
+    S.band(r, 0.06, 2500, 11000, 0.9, 0.0002, -90), S.scale(S.tick(r, 0.03, 1), 0.6))), () => v.railBoomLevel * 0.8);
+  sfx.addSound("railRoll", variants(2, 49, (r) => S.mix(S.thump(1.2, 52, 26, 0.45),
+    S.swell(r, S.lowPass(S.noise(r, 2.6, 200, 0.85, 0.12), 320), 0.1, 0.12, 0.35, 3, 9),
+    S.delay(S.band(r, 1.4, 120, 700, 0.35, 0.08, -18), 0.15))), () => v.railBoomLevel * 0.7);
   // Charging: a rising electrical whine with a second harmonic and crackle (played at the charge time's rate).
   sfx.addSound("railCharge", variants(1, 42, (r) => S.mix(S.whine(1.1, 160, 2100, 0.2), S.whine(1.1, 320, 4200, 0.06), S.servo(1.1, 600, 3200, 0.05), S.scale(S.crackle(r, 1.1, 0.16), 0.7))), () => v.railLevel * 0.6);
   // A rocket off the rail: a thump and a long hiss.

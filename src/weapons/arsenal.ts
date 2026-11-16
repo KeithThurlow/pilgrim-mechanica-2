@@ -1411,10 +1411,50 @@ export class Arsenal implements MechWeapons {
     }
     this.railShots.push({ path, from: { x: muzzle.x, y: muzzle.y, z: muzzle.z }, to, hits, age: 0, power, seed: Math.random() * 100, dir: { x: dir.x, y: 0, z: dir.z } });
     bf.sfx.playSound("rail", muzzle, 0.7 + 0.3 * power, 1.05 - 0.1 * power);
+    this.railBoom(path, to, dir, muzzle, power);
     u.upper.guns[side === 1 ? 0 : 1].kick = v.railKick;
     u.upper.shake = Math.min(0.08, u.upper.shake + 0.05 * power);
     if (s.model) s.model.recoil.position.z = -v.railKick * 1.5;
     this.onShake?.(v.railShake * power);
+  }
+
+  /**
+   * The sonic boom of a rail shot (Keith 2026-11-16: the slug is far past the speed of sound; it should sound and look
+   * loud and fast). Cosmetic: the boom, the crack where it ends and the thunder rolling back; a hard blast wave at the
+   * muzzle; bent air left along the path; sand blown out sideways where it flies low. The vapour cone and the shock
+   * rings are drawn from the shot (arsenalDraw.ts). Rail cannon boom sliders.
+   */
+  private railBoom(path: Vec3[], to: Vec3, dir: THREE.Vector3, muzzle: THREE.Vector3, power: number) {
+    const bf = this.bf, v = this.v, field = bf.field;
+    const k = 0.45 + 0.55 * power;
+    bf.sfx.playSound("railBoom", muzzle, k, 1.08 - 0.12 * power);
+    const L = Math.hypot(to.x - muzzle.x, to.z - muzzle.z);
+    const end = new THREE.Vector3(to.x, to.y, to.z);
+    if (L > 12) bf.sfx.playSound("railCrack", end, k, 0.95 + Math.random() * 0.1, 0.02 + L * 0.0004);
+    bf.sfx.playSound("railRoll", end, k, 0.9 + Math.random() * 0.15, 0.12 + L * 0.002);
+    if (v.railBoomWave > 0) {
+      const g = field.height(muzzle.x, muzzle.z);
+      bf.waves.post("rail", muzzle.x + dir.x * 1.5, muzzle.y, muzzle.z + dir.z * 1.5, v.railBoomWave * k, { ground: muzzle.y - g < 6 });
+    }
+    // Bent air along the path, thinning out with distance; every few metres, no more than 16 a shot.
+    if (v.railShimmer > 0 && path.length > 2) {
+      const n = Math.min(16, Math.max(1, Math.floor(L / 6)));
+      for (let i = 1; i <= n; i++) {
+        const p = path[Math.min(path.length - 1, Math.round((i / (n + 1)) * (path.length - 1)))];
+        const fall = 1 - 0.5 * (i / n);
+        bf.waves.puff(p.x, p.y, p.z, 1.6 + 0.8 * power, 0.06 * v.railShimmer * k * fall, 0.5 + 0.3 * Math.random());
+      }
+    }
+    // The shock under the slug blows the sand out sideways from its line where it flies low.
+    if (v.railBoomDust > 0) {
+      for (let i = 3; i < path.length; i += 3) {
+        const p = path[i], g = field.height(p.x, p.z), h = p.y - g;
+        if (h > 3.5 || bf.inWater(p.x, p.z)) continue;
+        const s = v.railBoomDust * k * (1 - h / 3.5);
+        bf.dust.kick(p.x, g, p.z, -dir.z, dir.x, s * 0.8);
+        bf.dust.kick(p.x, g, p.z, dir.z, -dir.x, s * 0.8);
+      }
+    }
   }
 
   /**

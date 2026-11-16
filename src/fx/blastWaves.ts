@@ -14,7 +14,7 @@ import type { Param } from "../core/tweaks";
 import { phoneDefaults } from "../core/phoneQuality";
 
 /** What went off. Each kind has its own profile (WAVE_KINDS) and slider. */
-export type WaveKind = "default" | "rocket" | "missile" | "lineMortar" | "mortar" | "cannon" | "turret" | "volley" | "beam" | "death";
+export type WaveKind = "default" | "rocket" | "missile" | "lineMortar" | "mortar" | "cannon" | "turret" | "volley" | "beam" | "death" | "rail";
 
 interface Profile {
   /** The kind's slider (scales size and strength; 0 turns the kind off). */
@@ -39,6 +39,9 @@ export const WAVE_KINDS: Record<WaveKind, Profile> = {
   volley:     { key: "waveVolleyK", label: "Excavator volleys", size: 1.15, strength: 1.1, life: 1.1, ring2: true, heat: true },
   beam:       { key: "waveBeamK", label: "Beam release", size: 1.4, strength: 1.4, life: 1.3, ring2: true, heat: true },
   death:      { key: "waveDeathK", label: "Vehicles blowing up", size: 1.4, strength: 1.3, life: 1.3, ring2: true, heat: true },
+  // The rail cannon's sonic boom at the muzzle (Keith 2026-11-16: "massively exceeding the speed of sound"): a hard,
+  // fast orb with a second ring, no lingering heat (the shimmer along the slug's path is posted by the shot itself).
+  rail:       { key: "waveRailK", label: "Rail cannon boom", size: 1.2, strength: 1.6, life: 0.8, ring2: true, heat: false },
 };
 export const WAVE_KIND_LIST = Object.keys(WAVE_KINDS) as WaveKind[];
 
@@ -75,7 +78,7 @@ export const BLAST_WAVE_DEFAULTS = phoneDefaults({
   waveHeatMax: 64,
   waveBeamHeat: 0.1,
   waveDefaultK: 1, waveRocketK: 1, waveMissileK: 1, waveLineK: 1, waveMortarK: 1, waveCannonK: 1,
-  waveTurretK: 1, waveVolleyK: 1, waveBeamK: 1, waveDeathK: 1,
+  waveTurretK: 1, waveVolleyK: 1, waveBeamK: 1, waveDeathK: 1, waveRailK: 1,
 });
 export type BlastWaveValues = typeof BLAST_WAVE_DEFAULTS;
 
