@@ -92,15 +92,15 @@ export const ENERGY_DEFAULTS = {
   // Sunder beam (Keith 2026-11-02: "like the walkers... charge up a beam and then you blast"): one press commits it: it
   // charges, then a heavy beam burns for its channel time while you steer it (slowly), cutting through everything under
   // it, then it ends and cools down. The whole cost is paid when it starts.
-  sunderDps: 650,
+  sunderDps: 450, // Keith 2026-11-16: was 650; two blasts at 1625 each one-tapped a 3000 hull
   sunderAp: 0.8,
   sunderTicks: 12,
   sunderRange: 55,
-  sunderCharge: 1.2,
+  sunderCharge: 1.6, // was 1.2: more time to dash out of the aim line
   sunderChannel: 2.5,
   sunderCooldown: 3,
   sunderEnergy: 3.5, // Keith 2026-11-14 (soft limits): over a light hull's 3-bar reactor, so it needs a Rampart or bigger, or a capacitor bank
-  sunderTrack: 70,
+  sunderTrack: 60,
   sunderWidth: 1,
   sunderSlow: 0.5,
   sunderCore: 0.45,

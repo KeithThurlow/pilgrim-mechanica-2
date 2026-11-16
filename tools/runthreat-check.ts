@@ -13,7 +13,8 @@ const fail = (s: string) => { console.log("  FAIL " + s); problems.push(s); };
 const LM = DROP_DEFAULTS.levelMetres;
 const dropLevel = (depth: number) => 1 + depth / LM;
 
-const t = new RunThreat({ ...RUN_THREAT_DEFAULTS });
+// The distance ratchet alone first (no creep), then the creep and heading home below.
+const t = new RunThreat({ ...RUN_THREAT_DEFAULTS, threatTimeRise: 0, threatDeepRise: 0 });
 const dt = 1 / 30, walk = 7;
 let depth = 0, maxDrop = 0, prev = 0, time = 0;
 // Out to 1500 m at walking pace.
@@ -56,10 +57,36 @@ const off = new RunThreat({ ...RUN_THREAT_DEFAULTS, threatOn: 0 });
 off.update(1, 1000, true, false);
 if (off.effective(200) !== 200 || off.m !== 0) fail("threat off still counts");
 // Time creep: standing still out there, the threat climbs.
-const creep = new RunThreat({ ...RUN_THREAT_DEFAULTS, threatTimeRise: 60 });
+const creep = new RunThreat({ ...RUN_THREAT_DEFAULTS, threatTimeRise: 60, threatDeepRise: 0 });
 for (let i = 0; i < 60 * 30; i++) creep.update(dt, 100, true, false);
 if (Math.abs(creep.m - 160) > 2) fail(`time creep: ${creep.m.toFixed(0)} m after a minute at 100 m, expected 160`);
 
+// Heading home slows the creep but never lowers the threat (Keith 2026-11-16); it falls only in convoy range.
+const D = RUN_THREAT_DEFAULTS;
+const stand = new RunThreat({ ...D }), back = new RunThreat({ ...D });
+stand.set(1500); back.set(1500);
+let dBack = 1500;
+for (let i = 0; i < 60 * 30; i++) {
+  stand.update(dt, 1500, true, false);
+  dBack -= 6 * dt;
+  back.update(dt, dBack, true, false);
+  if (back.m < 1500 - 1e-6) { fail(`heading home lowered the threat at ${dBack.toFixed(0)} m`); break; }
+}
+const gainStand = stand.m - 1500, gainBack = back.m - 1500;
+const expectStand = (D.threatTimeRise + D.threatDeepRise * 1.5) ;
+if (Math.abs(gainStand - expectStand) > 2) fail(`standing out at 1.5 km gained ${gainStand.toFixed(0)} m in a minute, expected ${expectStand.toFixed(0)}`);
+if (!(gainBack > 0)) fail("heading home stopped the creep entirely (threatHomeRise > 0 should keep a little)");
+if (gainBack > gainStand * (D.threatHomeRise + 0.1)) fail(`heading home gained ${gainBack.toFixed(0)} m, standing ${gainStand.toFixed(0)}: not slowed to ${D.threatHomeRise}`);
+if (back.trend !== "slowed") fail(`heading home trend ${back.trend}, expected slowed`);
+if (stand.trend !== "rising") fail(`standing out trend ${stand.trend}, expected rising`);
+// Out of range still: no fall. In range: falls.
+const before = back.m;
+back.update(dt, dBack, true, true);
+if (!(back.m < before) || back.trend !== "falling") fail("threat did not fall once in convoy range");
+// Going deeper than ever: surging (fast catch-up), shown as rising.
+const deep = new RunThreat({ ...D }); deep.set(300); deep.update(dt, 300, true, false); deep.update(dt, 900, true, false);
+if (deep.trend !== "rising" || deep.rate < 10) fail(`a new deepest point: trend ${deep.trend} at ${deep.rate.toFixed(1)} m/s`);
+console.log(`creep at 1.5 km: ${gainStand.toFixed(0)} m/min standing, ${gainBack.toFixed(0)} m/min walking home at 6 m/s`);
 console.log(`round trip at ${walk} m/s: out ${time.toFixed(0)} s to 1500 m, threat ${atTurn.toFixed(0)} m (threat level ${turnLevel.toFixed(1)});`
   + ` a drop by the convoy on the way back rolls level ${backLevel.toFixed(1)} (place alone: ${placeOnly.toFixed(1)}); home: back to 0 in ${secs.toFixed(0)} s`);
 if (problems.length) { console.log(`runthreat check FAILED (${problems.length})`); throw new Error("runthreat check failed"); }
