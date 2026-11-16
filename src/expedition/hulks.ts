@@ -145,9 +145,9 @@ export class Hulks {
   /** Scrap a jammed hulk pays for the parts left on it. */
   jamPay(parts: readonly Item[]) { return Math.round(this.v.jamScrap * parts.reduce((s, i) => s + itemValue(i, this.value), 0)); }
 
-  /** Start pulling a part (replaces a pull under way). */
+  /** Start pulling a part (not while another pull is under way: a click again doesn't start it over). */
   begin(h: Hulk, item: Item, onFoot: boolean): boolean {
-    if (h.jammed || !h.parts.includes(item)) return false;
+    if (this.pulling || h.jammed || !h.parts.includes(item)) return false;
     this.pulling = { hulk: h, item, t: 0, time: Math.max(0.05, onFoot ? this.v.pullHand : this.v.pullMech), onFoot };
     return true;
   }
