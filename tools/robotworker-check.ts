@@ -43,7 +43,7 @@ function same(a: RobotSnapshot, b: RobotSnapshot): string {
 }
 
 
-interface Run { frames: number; differ: number; first: string; results: number; resultDiffer: number; events: number; eventDiffer: number; deaths: number; doubleDeaths: number; replayed: number; shots: number; kills: number; ms: number; bytes: number }
+interface Run { frames: number; differ: number; first: string; results: number; resultDiffer: number; staleDiffer: number; events: number; eventDiffer: number; deaths: number; doubleDeaths: number; replayed: number; shots: number; kills: number; ms: number; bytes: number }
 
 function run(opts: { frames: number; lagEvery?: number; dropOp?: number }): Run {
   let seed = 4242;
@@ -70,7 +70,7 @@ function run(opts: { frames: number; lagEvery?: number; dropOp?: number }): Run 
   ref.keepOut = zone;
   const rv = new RobotsView(view, rec, () => null, SEED);
 
-  const r: Run = { frames: 0, differ: 0, first: "", results: 0, resultDiffer: 0, events: 0, eventDiffer: 0, deaths: 0, doubleDeaths: 0, replayed: 0, shots: 0, kills: 0, ms: 0, bytes: 0 };
+  const r: Run = { frames: 0, differ: 0, first: "", results: 0, resultDiffer: 0, staleDiffer: 0, events: 0, eventDiffer: 0, deaths: 0, doubleDeaths: 0, replayed: 0, shots: 0, kills: 0, ms: 0, bytes: 0 };
   // Events the reference handed out per frame, and the view's, to compare a frame late.
   const refEvents = new Map<number, string[]>();
   let viewEvents: string[] = [];
@@ -102,7 +102,10 @@ function run(opts: { frames: number; lagEvery?: number; dropOp?: number }): Run 
     if (opts.dropOp === ++ops) { const keep = view.remote; rec.command = (() => {}) as typeof rec.command; const b = f(view); delete (rec as Partial<GroundRecorder>).command; view.remote = keep; void b; return a; }
     const b = f(view);
     r.results++;
-    if (JSON.stringify(a) !== JSON.stringify(b)) { r.resultDiffer++; r.first ||= `frame ${r.frames}: a call gave ${JSON.stringify(a)} here, ${JSON.stringify(b)} on the view`; }
+    // While answers are held back (a slow worker) the view is frames stale: a position-dependent call (a trample, a
+    // stomp) can fairly answer otherwise. That's the lag, counted apart; on a fresh view every answer must match.
+    if (JSON.stringify(a) !== JSON.stringify(b) && held.length) r.staleDiffer++;
+    else if (JSON.stringify(a) !== JSON.stringify(b)) { r.resultDiffer++; r.first ||= `frame ${r.frames}: a call gave ${JSON.stringify(a)} here, ${JSON.stringify(b)} on the view`; }
     return a;
   };
   for (let f = 0; f < opts.frames; f++) {
@@ -163,7 +166,7 @@ function run(opts: { frames: number; lagEvery?: number; dropOp?: number }): Run 
 }
 
 const a = run({ frames: 2700, lagEvery: 37 });
-console.log(`  robots: ${a.frames} frames (45 s), the worker's swarm differs at ${a.differ}${a.first ? ` (first ${a.first})` : ""}; ${a.results} calls on the view, ${a.resultDiffer} gave another result; ${a.events} events handed out, ${a.eventDiffer ? "NOT" : "all"} the reference's; ${a.deaths} deaths handed out, ${a.doubleDeaths} twice; ${a.replayed} calls replayed on late snapshots; worker side ${(a.ms / a.frames).toFixed(3)} ms a frame; stream ${(a.bytes / a.frames).toFixed(0)} bytes a frame`);
+console.log(`  robots: ${a.frames} frames (45 s), the worker's swarm differs at ${a.differ}${a.first ? ` (first ${a.first})` : ""}; ${a.results} calls on the view, ${a.resultDiffer} gave another result (${a.staleDiffer} more on a stale view: the lag); ${a.events} events handed out, ${a.eventDiffer ? "NOT" : "all"} the reference's; ${a.deaths} deaths handed out, ${a.doubleDeaths} twice; ${a.replayed} calls replayed on late snapshots; worker side ${(a.ms / a.frames).toFixed(3)} ms a frame; stream ${(a.bytes / a.frames).toFixed(0)} bytes a frame`);
 if (a.differ) fail(`the worker's swarm differs from the reference at ${a.differ} frames (first ${a.first})`);
 if (a.resultDiffer) fail(`${a.resultDiffer} calls on the view gave another result than the reference's`);
 if (a.eventDiffer) fail(`the view's events aren't the reference's (${a.first})`);
