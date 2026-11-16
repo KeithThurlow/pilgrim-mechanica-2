@@ -116,7 +116,7 @@ import { loadoutFor, pickFromParams, type Pick } from "../../src/items/weaponPic
 import { Walkable } from "../../src/world/walkable";
 import { ConvoyWalkways, WALKWAY_DEFAULTS, WALKWAY_PARAMS, platformFrame, deckPlane } from "../../src/convoy/walkways";
 import { OnFoot, ON_FOOT_DEFAULTS, ON_FOOT_PARAMS, PILOT_TOPIC } from "../../src/pilot/onFoot";
-import { bayScreen, loadBay, saveBay, type BayState } from "../../src/ui/bay";
+import { bayScreen, loadBay, saveBay, saveOnLeave, type BayState } from "../../src/ui/bay";
 import { convoyShop } from "../../src/ui/convoyShop";
 import { VITALS_DEFAULTS, VITALS_PARAMS, vitalsHud } from "../../src/ui/vitalsHud";
 import { DOLL_DEFAULTS, DOLL_PARAMS, mechDollHud, partsFromHull } from "../../src/ui/mechDoll";
@@ -436,6 +436,7 @@ function persist() {
   savedScrap = loop.exp.bank.scrap;
   saveBay(BAY_KEY, bayState);
 }
+saveOnLeave(persist);
 let fitted: Resolved | null = null;
 function refit() {
   const r = resolve(bayState.loadout, V);
