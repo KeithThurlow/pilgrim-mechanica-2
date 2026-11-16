@@ -25,7 +25,7 @@ const charging = new Set<number>();
 const live = (bf: Battlefield, sound: string) => sampleBankOf(bf.sfx)?.liveSound(sound) ?? false;
 
 /**
- * A robot's death, heard (Keith 2026-11-02: the recorded robot death, remixed): a walker the full sound, a small one
+ * A robot's death, heard (Keith 2026-11-16: procedural, src/audio/robotDeathSounds.ts): a walker the full sound, a small one
  * higher, shorter and quieter (robotSmallDeath); a big one's sound is its core's death blast. Chained in front of
  * whatever the swarm does on a death. Cosmetic.
  */
@@ -33,7 +33,7 @@ export function robotDeathSound(bf: Battlefield, sw: RobotSwarm) {
   const prev = sw.onDeath, at = new THREE.Vector3();
   sw.onDeath = (i, nx, nz, speed) => {
     const small = sw.kind[i] === SMALL, share = (bf.v as { robotSmallDeath?: number }).robotSmallDeath ?? 0.3;
-    if (sw.kind[i] !== BIG && live(bf, "robotDeath") && (!small || share > 0))
+    if (sw.kind[i] !== BIG && bf.sfx.hasSound("robotDeath") && (!small || share > 0))
       bf.sfx.playSound("robotDeath", at.set(sw.px[i], sw.py[i], sw.pz[i]), small ? share : 1, small ? 1.6 + Math.random() * 0.3 : 0.9 + Math.random() * 0.2);
     prev?.(i, nx, nz, speed);
   };
@@ -207,7 +207,7 @@ export function fireRobotDeathBlast(bf: Battlefield, e: RobotDeathBlastEvent, sh
     // A slowed nova sounds a touch deeper (a square root of the slow-down: not a drawl).
     const deep = 1 / Math.sqrt(slow);
     bf.sfx.playSound("blastBoom", from, e.boom, (0.7 + Math.random() * 0.1) * deep);
-    if (live(bf, "robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), (0.95 + Math.random() * 0.1) * Math.max(0.8, deep));
+    if (bf.sfx.hasSound("robotBigDeath")) bf.sfx.playSound("robotBigDeath", from, Math.min(1.5, 0.6 + e.boom * 0.4), (0.95 + Math.random() * 0.1) * Math.max(0.8, deep));
     else bf.sfx.playSound("blast", from, e.boom * 0.5, (0.55 + Math.random() * 0.1) * deep);
   }
   shove?.(e.at.x, e.at.z, e.radius, e.shove);
