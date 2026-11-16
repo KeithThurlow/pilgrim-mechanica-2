@@ -326,6 +326,9 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-16 · Sprint grip: the dash's speed sheds, tighter sprint turns (Keith; Claude)
+Keith: "movement can still feel a little funky... not enough grip". Probe (`tools/grip-probe.ts`, numbers per case): the walk and Shift run were already tight (stop 0.12-0.16 s, 90° in 0.12 s) but the sprint was not: since the legs were slowed to 8.2 m/s (#341) a dash handed 20 m/s into the sprint, which eased off at `boundBuild` (0.3/s) for over 5 s, all of it on the sprint's low grip, so a 90° turn held on Space took 2.2 s and carried on 18.6 m, the feet sliding up to 16 m/s. Now past the top the sprint sheds at least `boundShed` 8 m/s² (Sprint slider; at the top in 1.7 s), grip ×1.5 on every leg type (`boundGrip` Rampart 0.7 → 1.05, Stilt 0.6 → 0.9, Siege 0.85 → 1.25) and `turnRate` 50 → 100°/s: the same turn 0.98 s and 5.7 m; letting go of the sprint stops in 0.21 s, 0.8 m (was 0.46 s, 3.6 m). Files `src/mech/walker.ts` (`towardTop`), `walkerTuning.ts`, `legTypes.ts`. Checked: `npm test`.
+
 ### 2026-11-16 · Bay save survives closing the browser (Keith; Claude)
 The bay (equipped loadout, stash, bank) is now also saved when the page is hidden or closing (`visibilitychange`, `pagehide`, `beforeunload`; Safari skips beforeunload): `saveOnLeave` in `src/ui/bay.ts`, used by `labs/convoy/main.ts`. A saved bay that exists but won't read back is copied to `<key>:unreadable` before a fresh bay replaces it. Cause not reproduced (the JSON round trip of rolled gear is lossless); this is the safety net. Open for Keith: if equipped gear still resets on the Mac, check `npm run play` opens the same origin (port) each time, since localStorage is per origin. Checked: npm check, npm test 115/115.
 

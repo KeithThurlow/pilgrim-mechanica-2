@@ -36,7 +36,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       // straight (Keith 2026-10-24: the thigh swung too far back). Walk check: thigh back and knee at push-off.
       strideBase: 2.3, stridePerSpeed: 1.5, strideMax: 7.05, // Keith 2026-10-27: longer strides at speed
       // The sprint (Keith 2026-10-26; Keith 2026-11-14: starting legs 8.2 m/s, all leg types within 10%).
-      boundTop: 8.2, boundBuild: 0.3, boundGrip: 0.7,
+      boundTop: 8.2, boundBuild: 0.3, boundGrip: 1.05, // grip ×1.5 (Keith 2026-11-16; was 0.7)
     },
   },
   // Rampart variants (src/mech/variants.ts) whose legs differ from the Rampart's; values from their modelling agents.
@@ -56,7 +56,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       // (0.94 of reach, the Rampart 0.87), so every step hurried; walking they sit lower than the others.
       walkCrouch: 0.3,
       // Fast and fragile: quicker to top speed, less grip, lands softer things only.
-      boundTop: 8.5, boundBuild: 0.4, boundGrip: 0.6, boundHop: 2.6, landHard: 9, landHurt: 10,
+      boundTop: 8.5, boundBuild: 0.4, boundGrip: 0.9, boundHop: 2.6, landHard: 9, landHurt: 10,
     },
   },
   "rampart-siege": {
@@ -72,7 +72,7 @@ export const LEG_TYPES: Record<string, LegType> = {
       toeHinge: 0.24, toeLength: 0.8, toeCurl: 35,
       strideBase: 2.1, stridePerSpeed: 0.8, strideMax: 6, // Keith 2026-11-14: longer walking steps (was 0.36 per m/s)
       // Slow to wind up, grips hard, lands almost anything.
-      boundTop: 7.8, boundBuild: 0.25, boundGrip: 0.85, boundHop: 2.1, landHard: 13, landHurt: 15,
+      boundTop: 7.8, boundBuild: 0.25, boundGrip: 1.25, boundHop: 2.1, landHard: 13, landHurt: 15,
     },
   },
 };
