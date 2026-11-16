@@ -40,14 +40,14 @@ export const ROBOT_DEFAULTS = {
   robotUphill: 0.9,
   robotDownhill: 0.25,
   robotFlank: 35,
-  robotSpacing: 1.5,
+  robotSpacing: 2.5,
   robotSepStrength: 4,
-  robotGap: 0.45,
+  robotGap: 0.4,
   robotAlign: 0.35,
   robotAlignRadius: 3,
   robotHp: 12,
-  robotSize: 0.9,
-  robotSizeJitter: 0.12,
+  robotSize: 1.8,
+  robotSizeJitter: 0.08,
   robotStride: 0.7,
   robotFootLift: 0.14,
   robotKeepOut: 0.6,
@@ -328,7 +328,7 @@ export const ROBOT_PARAMS: Param[] = [
   { key: "robotAlign", label: "Pack alignment", min: 0, max: 1, step: 0.01, group: G1, tip: "How much each one matches its neighbours' run: 0 loose, 1 a tight pack" },
   { key: "robotAlignRadius", label: "Pack radius (m)", min: 1, max: 8, step: 0.1, group: G1 },
   { key: "robotHp", label: "Health", min: 1, max: 100, step: 1, group: G1 },
-  { key: "robotSize", label: "Size (m)", min: 0.4, max: 2, step: 0.05, group: G1, tip: "Hub centre to foot is about 0.6 × this" },
+  { key: "robotSize", label: "Size (m)", min: 0.4, max: 4, step: 0.05, group: G1, tip: "Hub centre to foot is about 0.6 × this" },
   { key: "robotSizeJitter", label: "Size spread ±", min: 0, max: 0.4, step: 0.01, group: G1 },
   { key: "robotStride", label: "Stride (× size)", min: 0.2, max: 3, step: 0.05, group: G1, tip: "Ground covered per gait cycle, sets how fast the legs scuttle" },
   { key: "robotFootLift", label: "Foot lift (× size)", min: 0, max: 0.4, step: 0.01, group: G1 },
@@ -569,7 +569,7 @@ const RANK = [0, 2, 1];
 
 const DEG = Math.PI / 180;
 /** A scrapper's body radius for the trample (m). */
-const SMALL_BODY = 0.6;
+const SMALL_BODY = 1.2;
 const HASH_SIZE = 4096, HASH_MASK = HASH_SIZE - 1;
 const SLOTS_MAX = 64;
 
