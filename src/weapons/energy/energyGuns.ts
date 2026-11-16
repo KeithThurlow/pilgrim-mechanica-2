@@ -552,10 +552,11 @@ export class EnergyGuns {
     this.onFire?.("lance");
     const tr = this.trace(muzzle, d, st.range);
     const at = this.at.copy(muzzle).addScaledVector(d, tr.t);
-    this.last.lance = this.strike(tr, at, d, st.damage * power, st.ap, 3);
-    // The burst where it lands, by the charge (a lance at full makes a crater; a quick one only a pop).
+    // The burst where it lands, by the charge (a lance at full makes a crater; a quick one only a pop). First, so what
+    // it kills (the body struck too) is thrown by the blast (src/game/blastLaunch.ts), then the strike on the body.
     const r = st.blast * (0.4 + 0.6 * power);
     if (r > 0.3 && st.blastDamage > 0) bf.blast(u.team, at.clone(), r, st.blastDamage * power, st.ap, "beam");
+    this.last.lance = this.strike(tr, at, d, st.damage * power, st.ap, 3);
     if (tr.ground) bf.heat?.spot(at.x, at.z, 0.8 + r * 0.25, v.beamHeat * (0.6 + 0.4 * power));
     this.bolts.push({ cls: "lance", from: set3(v3(), muzzle), to: set3(v3(), at), age: 0, life: 0.35 + 0.25 * power, power, hit: !!tr.target });
     bf.gunFx.sparksAt(muzzle, d, Math.round(6 + 10 * power), 10);

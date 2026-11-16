@@ -39,7 +39,7 @@ export class DroidFight {
       sw.hideDead = true;
       sw.onDeath = (i, nx, nz, speed) => {
         const r = droidRagdoll(sw.v.banditHeight);
-        deaths.ragdoll(r.parts, r.joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i], { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed);
+        deaths.ragdoll(r.parts, r.joints, sw.px[i], sw.py[i], sw.pz[i], sw.heading[i], { x: sw.vx[i] * 0.3, y: 0, z: sw.vz[i] * 0.3 }, nx, nz, speed, 0, sw.deathUp[i]);
         this.from.set(sw.px[i], sw.py[i] + sw.v.banditHeight * 0.6, sw.pz[i]);
         bf.sfx.play("metalHit", this.from, 0.9, 0.55, false);
       };
