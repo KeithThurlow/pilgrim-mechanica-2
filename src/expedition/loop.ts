@@ -45,7 +45,7 @@ import { StriderCamps, STRIDER_CAMP_DEFAULTS, STRIDER_CAMP_PARAMS, STRIDER_CAMP_
 import { CrusherSites, CRUSHER_SITE_DEFAULTS, CRUSHER_SITE_PARAMS, CRUSHER_SITE_TOPIC } from "./crusherSites";
 import { DROID_ALL_DEFAULTS, DROID_PARAMS, DROID_GROUPS } from "../combat/droids";
 import { FieldSites, SITES_DEFAULTS, SITES_PARAMS, roadBlocks } from "./sites";
-import { ExpeditionHud } from "./expeditionHud";
+import { ExpeditionHud, type ThreatHud } from "./expeditionHud";
 import { DepthField, DEPTH_DEFAULTS, DEPTH_PARAMS, DEPTH_GROUP, SMALL_GROUP, shareK, convoyDepth, dangerOf, scaled } from "./depth";
 import { PadField, PadCaller, PAD_DEFAULTS, PAD_PARAMS, PAD_GROUP, PAD_PLACE_GROUP, padQuote, quoteText, type Pad, type Quote, type CallState } from "./pads";
 import { PadDraw } from "./padDraw";
@@ -420,6 +420,13 @@ export class ExpeditionLoop {
   }
 
   /** Near the convoy (within threatHome): the threat falls there and doesn't count (Keith 2026-11-14: no luring packs into its guns). */
+  /** The threat gauge's frame (expeditionHud.ts): level, where it is in the level, trend, and how far to convoy range. */
+  private threatHud(x: number, z: number, out: boolean): ThreatHud {
+    const t = this.runThreat, v = this.v;
+    const toRange = out ? Math.max(0, convoyDepth(this.route, x, z, v.depthTrain) - v.threatHome) : 0;
+    return { level: t.level(v.levelMetres), share: t.levelShare(v.levelMetres), m: t.m, trend: t.trend, rate: t.rate, toRange };
+  }
+
   private nearHome(x: number, z: number) {
     return convoyDepth(this.route, x, z, this.v.depthTrain) < this.v.threatHome;
   }
@@ -713,7 +720,7 @@ export class ExpeditionLoop {
         ? { eta: this.homeSprint.eta, fuel: this.homeSprint.walk * v.boundTop * 0.9 * v.homePace * v.fuelBound } : null,
       canRecall: exp.state === "out" && player.alive,
       pad: this.padHud(), depth: exp.state === "out" ? { m: this.depth.depth(p.x, p.z), live: this.depth.liveDepth(p.x, p.z), ring: this.depth.ring(p.x, p.z) } : null,
-      threat: v.threatOn > 0 && (exp.state === "out" || this.runThreat.m > 1) ? { level: this.runThreat.level(v.levelMetres), m: this.runThreat.m, falling: this.runThreat.falling, rising: this.runThreat.m < this.runThreat.peak - 1 } : null,
+      threat: v.threatOn > 0 && (exp.state === "out" || this.runThreat.m > 1) ? this.threatHud(foot ? pl!.x : p.x, foot ? pl!.z : p.z, exp.state === "out") : null,
       heat: { v: this.sites.salvage.heat, max: v.heatMax, pack: v.heatPack, raid: v.heatRaid }, bankShow: v.bankShow, seek: this.seeker.label(seek),
     });
     inp.mark?.("expedition hud");

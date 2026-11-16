@@ -956,6 +956,16 @@ export class WalkerSim {
    * the grip (grip × g / speed), the body may turn ahead of it into a drift that scrubs speed and slides the feet; walls
    * take the speed going into them.
    */
+  /**
+   * The sprint's speed toward the legs' top: builds at k (boundBuild's share of the gap); past the top (a dash's 20 m/s
+   * handed on) sheds at least boundShed m/s² (Keith 2026-11-16, grip: the legs got slower in #341 and the dash's speed
+   * took 5 s to ease off at boundBuild, all of it on the sprint's low grip, a long slide).
+   */
+  private towardTop(speed: number, top: number, k: number, dt: number) {
+    const eased = speed + (top - speed) * Math.min(1, k);
+    return speed > top ? Math.max(top, Math.min(eased, speed - this.v.boundShed * dt)) : eased;
+  }
+
   private runSteer(dt: number, cmd: MoveCommand) {
     const v = this.v;
     const prev = this.boundSpeed;
@@ -1013,7 +1023,7 @@ export class WalkerSim {
       if (feetOk && (this.burstT >= dashBurstEnd(v) || (down && this.boundSpeed <= Math.max(floor, 3)))) { this.boundSpeed = Math.max(this.boundSpeed, 0); this.burst = false; this.burstDone = true; }
     } else if (this.boostTo > this.boundSpeed) {
       this.boundSpeed = this.boostTo; this.boostTo = 0;
-    } else { this.boostTo = 0; this.boundSpeed += (top - this.boundSpeed) * Math.min(1, v.boundBuild * dt); }
+    } else { this.boostTo = 0; this.boundSpeed = this.towardTop(this.boundSpeed, top, v.boundBuild * dt, dt); }
     // Faster than the legs' top (a dash's boost) up a slope: gravity takes it off (Keith 2026-10-26: no flinging off ramps).
     if ((this.boundSpeed > top || this.boostTo > 0) && this.grade > 0) {
       const g = G * Math.sin(Math.atan(this.grade)) * dt;
@@ -1481,7 +1491,7 @@ export class WalkerSim {
     const rates = this.boundTurnRates();
     const share = clamp(st.T / (st.T + (2 * v.boundHop) / G), 0.08, 1);
     const top = this.boundTop(grade);
-    this.boundSpeed += (top - this.boundSpeed) * Math.min(1, (v.boundBuild * dt) / share);
+    this.boundSpeed = this.towardTop(this.boundSpeed, top, (v.boundBuild * dt) / share, dt);
 
     // Steering: the body turns toward the stick, the line of run follows at the grip; the gap between them is a drift
     // that scrubs speed and skids the feet sideways.
