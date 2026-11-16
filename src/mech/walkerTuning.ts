@@ -178,9 +178,13 @@ export const WALKER_DEFAULTS = {
   // The sprint's ground gait (Keith 2026-10-26 18:28: "an actual running animation where the foot cadence hits at the
   // same time", left, right, left, right, not paired stomps with a hop). The gallop above stays as the way into and out
   // of the air: a crest jump's or a fall's landing stance, then the run.
-  runSteps: 1.8,
-  runStepsTop: 3,
-  runPlant: 0.5,
+  // Keith 2026-11-16 ("running on the spot"): the run's stride in metres (a full cycle, plant to plant of one foot), so
+  // a change of top speed keeps the stride. Was 1.8 to 3 steps/s, set at 16 m/s tops: 5.2 m at today's 8.2, under the
+  // walk's 6.2. Now about 9.5 m with a short flight each step, the trailing foot pushing off 2+ m behind the hips.
+  runStride: 8,
+  runStrideTop: 9.5,
+  runStanceLen: 3.2,
+  runPlant: 1,
   runBlend: 0.6,
   runBob: 0.175,
   runThud: 0.11,
@@ -421,8 +425,9 @@ export const WALKER_PARAMS: Param[] = [
   { key: "turnRollMax", label: "Most lean into a turn (°)", min: 0, max: 45, step: 0.5, group: "Sprint" },
   { key: "turnRollEase", label: "Lean into turns: easing (1/s)", min: 0.5, max: 30, step: 0.5, group: "Sprint", tip: "How quickly the lean follows the turn, in and out" },
   { key: "turnLeanShift", label: "Lean into turns: hips over the inside (share)", min: 0, max: 1, step: 0.01, group: "Sprint", tip: "The hips move toward the inside of the turn as if the body leaned over its feet (1: pivoting on the ground), so the outside leg reaches out and the inside leg folds short" },
-  { key: "runSteps", label: "Run: steps per second at the run", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence as the sprint starts (at the Shift run's speed); stride is speed ÷ cadence" },
-  { key: "runStepsTop", label: "Run: steps per second at top speed", min: 1.5, max: 6, step: 0.05, group: "Sprint", tip: "Cadence and stride both rise with speed. The planted share is ground per stance ÷ stride, so the flights grow with speed" },
+  { key: "runStride", label: "Run: stride at the run (m)", min: 3, max: 16, step: 0.1, group: "Sprint", tip: "Plant to plant of the same foot as the sprint starts (the Shift run's speed); cadence is speed ÷ stride. The walk's is about 6" },
+  { key: "runStrideTop", label: "Run: stride at top speed (m)", min: 3, max: 16, step: 0.1, group: "Sprint", tip: "Plant to plant of the same foot at the legs' top speed. Longer than the ground under a stance ×2, the rest is flight" },
+  { key: "runStanceLen", label: "Run: ground per stance (m)", min: 1, max: 5, step: 0.05, group: "Sprint", tip: "How far the hips travel over a planted foot in the run: from landing ahead (Run: feet land ahead) to the push-off behind. Past the legs' reach behind, the planted foot slides" },
   { key: "runPlant", label: "Run: feet land ahead of the hips (m)", min: -0.5, max: 2, step: 0.01, group: "Sprint", tip: "Sprinters plant under the hips: a long reach out front brakes" },
   { key: "runBlend", label: "Run: blends in over (s)", min: 0.05, max: 1.5, step: 0.01, group: "Sprint", tip: "From the walk or the dash into the run gait, and back out when you let go" },
   { key: "runBob", label: "Run: hips rise and fall (m)", min: 0, max: 0.4, step: 0.005, group: "Sprint", tip: "Lowest at mid-stance, highest in the flight. Small: the hull rides level at speed" },
