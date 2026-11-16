@@ -42,7 +42,7 @@ export const ROBOT_DEFAULTS = {
   robotFlank: 35,
   robotSpacing: 2.5,
   robotSepStrength: 4,
-  robotGap: 0.45,
+  robotGap: 0.4,
   robotAlign: 0.35,
   robotAlignRadius: 3,
   robotHp: 12,

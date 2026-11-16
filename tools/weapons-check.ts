@@ -186,7 +186,8 @@ const dt = 1 / 120;
     const dmg = sw.damage.bind(sw);
     sw.damage = (i: number, a: number, dx: number, dz: number) => { hitIdx.add(i); return dmg(i, a, dx, dz); };
     const rt = new RobotTarget(sw, 2);
-    const shot = shoot(flat, [rt], { x: 0, y: 0, z: 30 }, railF({ x: 0, y: 0, z: 30 }));
+    // Scrappers are twice as wide since 2026-11-16 and take twice the penetration each: a bigger budget keeps this line whole.
+    const shot = shoot(flat, [rt], { x: 0, y: 0, z: 30 }, railSheet(V, { damage: 1000, charge: 1, cooldown: 1, range: 60, pen: V.railPen * 1.6 }, { x: 0, y: 0, z: 30 }));
     must(ids.every((i) => hitIdx.has(i)), `rail missed robots on its line: hit ${[...hitIdx].join(",")} of ${ids.join(",")} (budget left ${shot.result.left.toFixed(2)})`);
     must(rt.partHits[0] === ids.length && rt.partHits[1] === 0, `robots on the line weren't all hit by the body (parts ${rt.partHits.join("/")})`);
     const big = ids[3];

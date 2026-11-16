@@ -198,7 +198,7 @@ export const HULL = BASE_BY_ID["hull-rampart"].stats;
 export function targets(): T[] {
   return [
     { id: "swarm", name: "Swarm cluster", hp: RB.robotHp, r: robotR(RB.robotSize, 0.45), speed: RB.robotRunSpeed, juke: 0.25, dist: 25, engage: 8,
-      armour: RB.robotArmour, penDensity: PEN_DEFAULTS.penScrapper, directK: 1, roundSplashK: 1, blastK: 1, swarm: { n: 36, rho: 0.2 } },
+      armour: RB.robotArmour, penDensity: PEN_DEFAULTS.penScrapper, directK: 1, roundSplashK: 1, blastK: 1, swarm: { n: 36, rho: 0.1 } },
     { id: "cutter", name: "Lone cutter", hp: RB.robotMidHp, r: robotR(RB.robotMidSize, 0.44), speed: RB.robotMidSpeed, juke: 0.35, dist: 22, engage: 4,
       armour: RB.robotMidArmour, penDensity: PEN_DEFAULTS.penCutter, directK: 0.95, roundSplashK: RB.robotMidSplash, blastK: RB.robotMidBlast },
     { id: "excavator", name: "Excavator", hp: RB.robotBigHp, r: robotR(RB.robotBigSize, 0.5), speed: RB.robotBigSpeed, juke: 0.3, dist: 30, engage: 12,
