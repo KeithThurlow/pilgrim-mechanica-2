@@ -30,6 +30,7 @@ export const CRATER_DEFAULTS = {
   craterSlump: 180,
   craterMax: 200,
   craterStepNodes: 12000,
+  craterTickWork: 12000,
   hardRock: 0.95,
   hardRockySand: 0.6,
   hardShallows: 0.15,
@@ -48,6 +49,7 @@ export const CRATER_PARAMS: Param[] = [
   { key: "craterSlump", label: "Slump time (s)", min: 10, max: 1200, step: 5, group: G, tip: "Sand slides back in: craters are 95% healed after this long" },
   { key: "craterMax", label: "Max craters", min: 10, max: 600, step: 10, group: G, tip: "Past this the oldest heal over a few seconds" },
   { key: "craterStepNodes", label: "Big craters: work a tick (nodes)", min: 0, max: 60000, step: 500, group: G, tip: "A crater over a quarter of this many lattice nodes (0.5 m apart: from about 8 m of radius at 12000) is fitted over the next ticks, this much work in each, and lands a few ticks after its blast (a dying walker's 16-24 m crater: 0.3-0.6 s), so it doesn't stall a tick (Keith 2026-11-13: sim times over 80 ms). 0: every crater at once" },
+  { key: "craterTickWork", label: "All craters: work a tick (nodes)", min: 0, max: 60000, step: 500, group: G, tip: "Most crater fitting one tick does, small and big together (Keith 2026-11-16: sim spikes on the phone; one turret shell's crater on fresh sand took 15-35 ms): a blast whose crater would pass it waits in line behind the big ones and lands a tick or a few on. 0: no cap (small craters always at once)" },
   { key: "hardRock", label: "Hardness: bare rock", min: 0, max: 1, step: 0.01, group: G, tip: "0 dents like loose sand, 1 can't be dented" },
   { key: "hardRockySand", label: "Hardness: rocky sand", min: 0, max: 1, step: 0.01, group: G },
   { key: "hardShallows", label: "Hardness: shallows sand", min: 0, max: 1, step: 0.01, group: G },
@@ -107,7 +109,7 @@ interface Job {
  * reads, each a sample and up to 17 modifier reads), and per node the fit's setup, one sliding sweep, one settling
  * pass and one steepness scan (measured 2026-11-13 on the convoy's ground).
  */
-const BAKE_COST = 3000, SETUP_COST = 1 / 4, SWEEP_COST = 1 / 8, PASS_COST = 1 / 12, STEEP_COST = 1 / 8;
+const BAKE_COST = 3000, SETUP_COST = 1, SWEEP_COST = 1 / 8, PASS_COST = 1 / 12, STEEP_COST = 1 / 8, MOVE_COST = 1;
 
 /** Rim bump: centred at 1.1 radii, half-width 0.5 radii; the bowl and rim reach 1.6 radii. */
 const RIM_C = 1.1, RIM_W = 0.5, REACH = RIM_C + RIM_W;
@@ -161,9 +163,11 @@ export class CraterLayer {
   /** Big craters being prepared, oldest first. */
   private jobs: Job[] = [];
   private busy = false;
+  /** Work done by craters fitted at once since the last update() (craterTickWork). */
+  private spent = 0;
   private s: GroundSample = { h: 0, crest: 0, flat: 0 };
   private ms = { w: 0, berm: 0, lift: 0, rough: 0 };
-  readonly stats = { addMs: 0, scale: 1, sweeps: 0, tiles: 0, deferred: false, pending: 0 };
+  readonly stats = { addMs: 0, scale: 1, sweeps: 0, tiles: 0, deferred: false, pending: 0, restarts: 0, rushed: 0 };
 
   constructor(public v: CraterValues, readonly field: DuneField) {}
 
@@ -280,6 +284,7 @@ export class CraterLayer {
       j.begun = false;
       j.fit = this.fitSteps(j.x, j.z, j.r, j.d, j.a, j.tanWall, j.i0, j.j0, j.nx, j.nz);
       j.again++;
+      this.stats.restarts++;
     }
     for (const t of this.tiles.values()) {
       const ox = t.tx * TILE, oz = t.tz * TILE;
@@ -312,14 +317,14 @@ export class CraterLayer {
     // Its footprint on the lattice, with room round it for slumped sand (the outer ring stays as it is).
     const R = r * REACH + 1.5;
     const i0 = Math.floor((x - R) / STEP), i1 = Math.ceil((x + R) / STEP), j0 = Math.floor((z - R) / STEP), j1 = Math.ceil((z + R) / STEP);
-    const nx = i1 - i0 + 1, nz = j1 - j0 + 1, step = Math.max(0, v.craterStepNodes ?? 0);
+    const nx = i1 - i0 + 1, nz = j1 - j0 + 1, step = Math.max(0, v.craterStepNodes ?? 0), cap = Math.max(0, v.craterTickWork ?? 0);
     this.stats.deferred = false;
     // Fitted along the lattice's straight and diagonal steps; between nodes the slope can run up to ~8% steeper
     // than along them, so the steps are held that much under the limit (tanWall / 1.08).
     const fit = this.fitSteps(x, z, r, d, a, tanWall / 1.08, i0, j0, nx, nz);
     // A big one, or one on top of a big one still on its way (it lands after it, as it was made after it): fitted
     // over the next updates (stepJobs), landing through update()'s changed().
-    if (step > 0 && (nx * nz > step / 4 || this.jobs.some((j) => Math.abs(j.x - x) < j.R + R && Math.abs(j.z - z) < j.R + R))) {
+    if (step > 0 && (nx * nz > step / 4 || (cap > 0 && this.spent + this.estimate(i0, j0, nx, nz) > cap) || this.jobs.some((j) => Math.abs(j.x - x) < j.R + R && Math.abs(j.z - z) < j.R + R))) {
       this.jobs.push({ x, z, r, d, a, tanWall: tanWall / 1.08, R, i0, j0, nx, nz, fit, again: 0, begun: false });
       this.stats.deferred = true;
       this.stats.pending = this.jobs.length;
@@ -327,13 +332,24 @@ export class CraterLayer {
       return [i0 * STEP, j0 * STEP, i1 * STEP, j1 * STEP];
     }
     let part = fit.next();
-    while (!part.done) part = fit.next();
+    while (!part.done) { this.spent += part.value; part = fit.next(); }
     const depth = part.value;
     this.stats.addMs = performance.now() - t0;
     if (depth < 0.01) return null;
     this.keep(x, z, r, depth, a, R);
     this.stats.addMs = performance.now() - t0;
     return [i0 * STEP, j0 * STEP, i1 * STEP, j1 * STEP];
+  }
+
+  /**
+   * Roughly the work a crater on these nodes takes (fitSteps' units): its new tiles' softness, the ground read under it
+   * and a few sweeps. For the tick's cap: deterministic (no clock), so the sim worker's copy queues the same ones.
+   */
+  private estimate(i0: number, j0: number, nx: number, nz: number): number {
+    let fresh = 0;
+    const tx1 = Math.floor((i0 + nx - 1) / T), tz1 = Math.floor((j0 + nz - 1) / T);
+    for (let tz = Math.floor(j0 / T); tz <= tz1; tz++) for (let tx = Math.floor(i0 / T); tx <= tx1; tx++) if (!this.tiles.has(tkey(tx, tz))) fresh++;
+    return fresh * BAKE_COST + nx * nz * 2;
   }
 
   /** A fitted crater into the list; past the count the oldest heal over a few seconds (dropping one at once would pop the ground under a foot). */
@@ -358,7 +374,7 @@ export class CraterLayer {
       j.begun = true;
       let part = j.fit.next();
       // Started over more than twice (the plough keeps cutting under it): all of it now, and nothing else this call.
-      if (j.again > 2 && budget !== Infinity) { while (!part.done) part = j.fit.next(); budget = 0; }
+      if (j.again > 2 && budget !== Infinity) { while (!part.done) part = j.fit.next(); budget = 0; this.stats.rushed++; }
       if (!part.done) { budget -= part.value; continue; }
       this.jobs.shift();
       if (part.value >= 0.01) {
@@ -388,12 +404,16 @@ export class CraterLayer {
     /** Its footprint's tiles, by key: the layer's, or the ones made here. */
     const used = new Map<number, Tile>();
     // The ground under the dents, a few rows a part.
-    for (let i = 0; i < N;) {
-      const end = Math.min(N, i + 2048);
+    // (Its loops in plain closures, not in the generator's body: V8 runs a generator's own loops far slower, perf
+    // 2026-11-16: a 6 m crater's slump sweep took 1.4 ms in the generator, a tenth of that in a closure.)
+    const readBase = (i: number, end: number) => {
       this.busy = true;
       for (; i < end; i++) base[i] = this.field.height((i0 + (i % nx)) * STEP, (j0 + Math.floor(i / nx)) * STEP);
       this.busy = false;
-      if (i < N) yield 2048;
+    };
+    for (let i = 0; i < N; i += 2048) {
+      readBase(i, Math.min(N, i + 2048));
+      if (i + 2048 < N) yield 2048;
     }
     // The tiles it makes: their softness baked one a part, kept here until it is written.
     const made = new Map<number, Tile>();
@@ -406,47 +426,50 @@ export class CraterLayer {
       made.set(k, t);
       yield BAKE_COST;
     }
-    const G0 = this.slump;
-    for (let j = 0, i = 0; j < nz; j++) for (let k = 0; k < nx; k++, i++) {
-      const ix = i0 + k, iz = j0 + j, tx = Math.floor(ix / T), tz = Math.floor(iz / T);
-      const key = tkey(tx, tz), q = (iz - tz * T) * T + (ix - tx * T);
-      let t = used.get(key);
-      if (!t) {
-        t = this.tiles.get(key) ?? made.get(key);
-        // (One the layer had when the baking began and has since healed away: baked now.)
-        if (!t) { t = { tx, tz, u: new Float32Array(T * T), soft: new Float32Array(T * T), maxU: 0, drawn: 0 }; this.bakeSoft(t); }
-        used.set(key, t);
-      }
-      tl[i] = t; ti[i] = q;
-      soft[i] = t.soft[q];
-      u0[i] = t.u[q] * G0;
-      const edge = j === 0 || k === 0 || j === nz - 1 || k === nx - 1;
-      mine[i] = edge ? 0 : d * craterProfile(Math.hypot(ix * STEP - x, iz * STEP - z) / r, a);
-    }
-    const H = new Float32Array(N), H0 = new Float32Array(N);
     const fill = (out: Float32Array, s: number) => { for (let i = 0; i < N; i++) out[i] = base[i] + soft[i] * this.sat(u0[i] + s * mine[i]); };
-    fill(H0, 0);
+    const H = new Float32Array(N), H0 = new Float32Array(N);
     const off = NB.map(([di, dj]) => dj * nx + di);
-    // Allowed rise across each step: the wall limit, or what the step was before (bare ground or other craters).
-    // Worked out once per pair of neighbours (perf 2026-11-13: it was a closure called some 300 times a node), kept at
-    // the pair's lower node in one array per direction: +x, +z and the two diagonals.
     const A = [new Float64Array(N), new Float64Array(N), new Float64Array(N), new Float64Array(N)];
-    const aOff = [1, nx, nx + 1, nx - 1], aLen = [NL[0], NL[2], NL[4], NL[6]];
-    for (let t = 0; t < 4; t++) {
-      const At = A[t], o = aOff[t], wall = tanWall * aLen[t];
-      const k0 = t === 3 ? 1 : 0, k1 = t === 0 || t === 2 ? nx - 1 : nx, j1 = t === 0 ? nz : nz - 1;
-      for (let j = 0; j < j1; j++) for (let k = k0; k < k1; k++) {
-        const p = j * nx + k, q = p + o;
-        At[p] = Math.max(wall, Math.abs(H0[p] - H0[q]), Math.abs(base[p] - base[q])) + 1e-5;
+    const setup = () => {
+      const G0 = this.slump;
+      for (let j = 0, i = 0; j < nz; j++) for (let k = 0; k < nx; k++, i++) {
+        const ix = i0 + k, iz = j0 + j, tx = Math.floor(ix / T), tz = Math.floor(iz / T);
+        const key = tkey(tx, tz), q = (iz - tz * T) * T + (ix - tx * T);
+        let t = used.get(key);
+        if (!t) {
+          t = this.tiles.get(key) ?? made.get(key);
+          // (One the layer had when the baking began and has since healed away: baked now.)
+          if (!t) { t = { tx, tz, u: new Float32Array(T * T), soft: new Float32Array(T * T), maxU: 0, drawn: 0 }; this.bakeSoft(t); }
+          used.set(key, t);
+        }
+        tl[i] = t; ti[i] = q;
+        soft[i] = t.soft[q];
+        u0[i] = t.u[q] * G0;
+        const edge = j === 0 || k === 0 || j === nz - 1 || k === nx - 1;
+        mine[i] = edge ? 0 : d * craterProfile(Math.hypot(ix * STEP - x, iz * STEP - z) / r, a);
       }
-    }
+      fill(H0, 0);
+      // Allowed rise across each step: the wall limit, or what the step was before (bare ground or other craters).
+      // Worked out once per pair of neighbours (perf 2026-11-13: it was a closure called some 300 times a node), kept at
+      // the pair's lower node in one array per direction: +x, +z and the two diagonals.
+      const aOff = [1, nx, nx + 1, nx - 1], aLen = [NL[0], NL[2], NL[4], NL[6]];
+      for (let t = 0; t < 4; t++) {
+        const At = A[t], o = aOff[t], wall = tanWall * aLen[t];
+        const k0 = t === 3 ? 1 : 0, k1 = t === 0 || t === 2 ? nx - 1 : nx, j1 = t === 0 ? nz : nz - 1;
+        for (let j = 0; j < j1; j++) for (let k = k0; k < k1; k++) {
+          const p = j * nx + k, q = p + o;
+          At[p] = Math.max(wall, Math.abs(H0[p] - H0[q]), Math.abs(base[p] - base[q])) + 1e-5;
+        }
+      }
+    };
+    setup();
     // Neighbour n of node i: its pair's array and where the pair is kept from i (NB's order).
     const aOf = [A[0], A[0], A[1], A[1], A[2], A[3], A[3], A[2]], aAt = [0, -1, 0, -nx, 0, -nx + 1, 0, -nx - 1];
     yield N * SETUP_COST;
     // Slump, first as sand slides: sweeps moving a share of each too-steep step's excess downhill (mass kept).
     let sweeps = 0;
     fill(H, 1);
-    for (let it = 0; it < 12; it++) {
+    const sweep = () => {
       let moved = 0;
       for (let j = 1; j < nz - 1; j++) for (let k = 1; k < nx - 1; k++) {
         const i = j * nx + k;
@@ -466,10 +489,14 @@ export class CraterLayer {
           moved++;
         }
       }
+      return moved;
+    };
+    for (let it = 0; it < 12; it++) {
+      const moved = sweep();
       sweeps = it + 1;
       if (!moved) break;
       fill(H, 1);
-      yield N * SWEEP_COST;
+      yield N * SWEEP_COST + moved * MOVE_COST;
     }
     // Then settle what's left exactly: cut every node down to no more than its neighbours plus the allowed rise, then
     // fill every node up to no less than its neighbours minus it (two-way chamfer sweeps, as a distance transform;
@@ -494,8 +521,10 @@ export class CraterLayer {
       }
     };
     for (const cut of [true, false]) for (let p = 0; p < 3; p++) for (const dir of [0, 1]) { pass(cut, dir); yield N * PASS_COST; }
-    for (let i = 0; i < N; i++) if (free[i]) mine[i] = this.satInv((H[i] - base[i]) / soft[i]) - u0[i];
+    const back = () => { for (let i = 0; i < N; i++) if (free[i]) mine[i] = this.satInv((H[i] - base[i]) / soft[i]) - u0[i]; };
+    back();
     this.stats.sweeps = sweeps;
+    yield N * PASS_COST;
     const steep = (s: number) => {
       fill(H, s);
       for (let j = 1; j < nz - 1; j++) for (let k = 1; k < nx - 1; k++) {
@@ -511,20 +540,23 @@ export class CraterLayer {
       s = lo;
     }
     this.stats.scale = s;
-    let deep = 0;
-    for (let i = 0; i < N; i++) deep = Math.min(deep, s * mine[i] * soft[i]);
+    const deepest = () => { let deep = 0; for (let i = 0; i < N; i++) deep = Math.min(deep, s * mine[i] * soft[i]); return deep; };
+    const deep = deepest();
     if (-deep < 0.01) return 0;
     // Written: its new tiles into the layer (and one that healed away while it was fitted, back), the sand moved at the
     // slump factor of now.
     for (const [k, t] of used) if (this.tiles.get(k) !== t) this.tiles.set(k, t);
     const G1 = this.slump;
-    for (let i = 0; i < N; i++) {
-      if (mine[i] === 0) continue;
-      const t = tl[i], q = ti[i];
-      t.u[q] += (s * mine[i]) / G1;
-      t.maxU = Math.max(t.maxU, Math.abs(t.u[q]));
-      t.drawn = t.maxU * G1;
-    }
+    const write = () => {
+      for (let i = 0; i < N; i++) {
+        if (mine[i] === 0) continue;
+        const t = tl[i], q = ti[i];
+        t.u[q] += (s * mine[i]) / G1;
+        t.maxU = Math.max(t.maxU, Math.abs(t.u[q]));
+        t.drawn = t.maxU * G1;
+      }
+    };
+    write();
     return -deep;
   }
 
@@ -534,7 +566,11 @@ export class CraterLayer {
    */
   update(dt: number, changed?: (x0: number, z0: number, x1: number, z1: number) => void) {
     this.time += dt;
-    if (this.jobs.length) this.stepJobs(Math.max(1, this.v.craterStepNodes ?? 0), changed);
+    // The big ones on their way get this tick's work left after the blasts fitted at once (a quarter at least), when
+    // the cap is on; the tick's count starts over.
+    const step = Math.max(1, this.v.craterStepNodes ?? 0), cap = Math.max(0, this.v.craterTickWork ?? 0);
+    if (this.jobs.length) this.stepJobs(cap > 0 ? Math.max(Math.min(step, cap) / 4, Math.min(step, cap - this.spent)) : step, changed);
+    this.spent = 0;
     if (!this.tiles.size && !this.list.length) return;
     const v = this.v;
     this.slump *= Math.exp((-3 * dt) / Math.max(1, v.craterSlump));

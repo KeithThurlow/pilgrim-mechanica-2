@@ -151,6 +151,7 @@ export class SimHost {
     this.robotsView.frameId = this.id + 1;
     sw.link = { sent: this.id, onSnap: null, interp: null };
     (this.stats as Record<string, unknown>).robots = this.robotsView.stats;
+    (this.stats as Record<string, unknown>).robotsLink = sw.link;
   }
   private robotsView: RobotsView | null = null;
 

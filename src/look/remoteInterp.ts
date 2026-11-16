@@ -31,11 +31,11 @@ export const REMOTE_INTERP = {
   /** The least delay (ticks). */
   minDelay: 0.5,
   /** The most delay (ticks). */
-  maxDelay: 4,
+  maxDelay: 3,
   /** How fast the delay rises to a later answer, and eases back (ticks a second). */
   rise: 14,
   fall: 0.4,
-  /** How fast the worst lateness seen is forgotten (ticks a second). */
+  /** How fast the worst lateness seen is forgotten (ticks a second). Lateness past maxDelay is a stall, not followed. */
   forget: 0.25,
 };
 
@@ -94,7 +94,8 @@ export class RemoteInterp {
     const o = this.o, newest = this.ring[this.head];
     // How late answers are: the newest tick sent less the newest answered, at its worst lately.
     const late = sent - newest.id + Math.max(0, Math.min(1, alpha));
-    this.peak = Math.max(late, this.peak - o.forget * dt);
+    // A stall longer than the delay can cover (the page loading, a hitch) isn't followed: the swarm just stands.
+    this.peak = Math.max(late <= o.maxDelay ? late : 0, this.peak - o.forget * dt);
     const want = Math.min(o.maxDelay, Math.max(o.minDelay, this.peak + o.margin));
     const step = (want > this.delay ? o.rise : o.fall) * dt;
     this.delay += Math.max(-step, Math.min(step, want - this.delay));
