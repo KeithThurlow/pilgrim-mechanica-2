@@ -404,6 +404,17 @@ const TAP_BACK = 1.0;
   console.log(`grip returns with speed: ${msgs.join(" · ")} · sprint at top ${runTop.toFixed(1)} m/s² (= boundGrip × g)`);
 }
 
+// The dash crouch (Keith 2026-11-16): the hips are down during the burst, not after it, and back up once it's done.
+{
+  const { dipTrace } = await import("./dash-dip-probe");
+  const tr = dipTrace(0.08, [0, 1]), at = (T: number) => tr[Math.round(T * 120) - 1].dip;
+  const mid = at(0.2), late = at(1.0), peak = tr.reduce((a, r) => (r.dip > a.dip ? r : a));
+  if (mid < v.dashCrouch * 0.8) problems.push(`the dash crouch is only ${mid.toFixed(2)} m down 0.2 s in (want ${(v.dashCrouch * 0.8).toFixed(2)})`);
+  if (peak.t > 0.45) problems.push(`the dash crouch is deepest at ${peak.t.toFixed(2)} s, after the burst`);
+  if (Math.abs(late) > 0.12) problems.push(`the hips are ${late.toFixed(2)} m off standing 1 s after a tapped dash`);
+  console.log(`dash crouch: ${mid.toFixed(2)} m down 0.2 s in, deepest ${peak.dip.toFixed(2)} m at ${peak.t.toFixed(2)} s, ${late.toFixed(2)} m at 1 s`);
+}
+
 const misses = sim.stats.overreach / Math.max(1, sim.stats.frames);
 if (nan) problems.push(`${nan} NaN frames`);
 if (worstFoot > 0.05) problems.push(`a skidding foot left the sand by ${worstFoot.toFixed(2)} m`);

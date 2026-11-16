@@ -256,6 +256,8 @@ export class WalkerSim {
   private tuck = { x: 0, y: 0, theta: 0 };
   /** The hips' target height last frame (for the run's feed-forward over rising ground). */
   private prevYT = NaN;
+  /** The dash crouch (m, hips down; dashCrouch) now, for its speed. */
+  private dashCrouchNow = 0;
   /**
    * The dash as a push-off (Keith 2026-10-26 18:28): P the foot it pushes off (held, then drawn back under), L the lead
    * foot (steps out toward the dash and slides). Offsets are world x/z from the body and y from the hips.
@@ -436,7 +438,7 @@ export class WalkerSim {
     this.accLean.x = this.accLean.z = this.accLean.vx = this.accLean.vz = 0; this.accVel.x = this.accVel.z = 0; this.accFresh = true;
     this.accPitch = this.accRoll = 0;
     this.running = false; this.runK = 0; this.dutyNow = this.v.duty; this.cpsNow = 0; this.prevYT = NaN; this.reachCap = NaN; this.slip.set(0, 0, 0);
-    this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstBraking = false; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0;
+    this.pushLatch = false; this.pushQuiet = 0; this.burst = false; this.burstBraking = false; this.boostTo = 0; this.dashRoll = this.dashPitch = this.dashDipNow = this.dashCrouchNow = 0;
     this.hovering = false; this.hov = new HoverState();
     this.pos.set(x, 0, z);
     this.heading = heading;
@@ -1739,6 +1741,20 @@ export class WalkerSim {
     this.dashDipNow = -v.dashDip * k;
   }
 
+  /** The dash crouch for this frame (m): eased in from the press, held to the burst's hold end, out after it. */
+  private dashCrouchStep(dt: number) {
+    const v = this.v, c = v.dashCrouch;
+    if (c <= 0 || this.hovering) return 0;
+    const t = this.inDash ? this.dashClock : -1, out = Math.max(0.03, v.dashCrouchOut);
+    // Out of a dash it comes up at about its stand-up pace; a dash pressed while still down starts from there.
+    const rising = Math.max(0, this.dashCrouchNow - (c / out) * dt * 1.5);
+    if (t < 0) return rising;
+    const h = this.dashHoldEnd;
+    // Backpedalling first (a dash against the way it was going) it is braking, crouched by the steps' dip already: half.
+    const k = this.dashMove?.pedal ? 0.5 : 1;
+    return Math.max(rising, k * c * smooth(0, Math.max(0.01, v.dashCrouchIn), t) * (1 - smooth(h, h + out, t)));
+  }
+
   /** A backpedal step starts: this foot back past the other, toward the dash. */
   private pedalLift(f: Foot, fromPlant: boolean) {
     const dm = this.dashMove!, p = dm.pedal!;
@@ -2579,9 +2595,14 @@ export class WalkerSim {
       if (yT > this.reachCap + v.runReachGive) yT += (this.reachCap + v.runReachGive - yT) * rk;
     }
     // Following the ground's own rise (feed-forward) so a fast run up a slope doesn't lag under it.
+    // The dash crouch (Keith 2026-11-16): down as it pushes off, held through the burst, up as it stops or the sprint
+    // takes over; fed forward at its own speed so the hips are down during the dash, not after it.
+    const dc = this.dashCrouchStep(dt), dcv = clamp((dc - this.dashCrouchNow) / dt, -12, 12);
+    this.dashCrouchNow = dc;
+    yT -= dc;
     const yv = Number.isFinite(this.prevYT) ? clamp((yT - this.prevYT) / dt, -12, 12) : 0;
     this.prevYT = yT;
-    this.bodyY.stepFF(yT, yv * rk, dt);
+    this.bodyY.stepFF(yT, (yv + dcv) * rk - dcv, dt);
     this.hipShort = Math.max(0, yT - this.bodyY.x);
     this.impact.step(0, dt);
 
@@ -2707,7 +2728,7 @@ export class WalkerSim {
     if (this.airborne) { this.vel.set(this.airVel.x, 0, this.airVel.z); this.bodyY.v = this.airVel.y; this.bodyY.x = this.airY; }
     this.airborne = false; this.squatState = null; this.dashMove = null; this.burst = false; this.boostTo = 0;
     this.bStance = null; this.bLeap = false; this.running = false; this.runK = 0;
-    this.hipOpen = 0; this.dashRoll = this.dashPitch = this.dashDipNow = 0; this.turnRoll = 0;
+    this.hipOpen = 0; this.dashRoll = this.dashPitch = this.dashDipNow = this.dashCrouchNow = 0; this.turnRoll = 0;
     this.hov = new HoverState();
     for (const f of this.feet) { f.airRel.subVectors(f.pos, this.pelvis); f.kneeYaw = 0; }
   }
