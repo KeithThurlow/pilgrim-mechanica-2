@@ -327,6 +327,10 @@ Things that exist in a partial or stand-in form, or that couldn't be done yet. R
 
 ## Changes
 
+### 2026-11-16 · `npm run play` reuses one port (Keith: runs were stacking up servers on new ports; Claude)
+- `tools/play.mjs`: before serving, stops earlier play/dev servers (node listening on 4173-4189, 5173-5189; netstat + taskkill on Windows, lsof + kill on Mac/Linux), then serves on 4173 (`--dev` 5173) with `--strictPort`. README updated.
+- Checked: three node listeners on 4173/4175/5174 stopped and the ports freed (Linux); Windows path by netstat's format, untested on Keith's PC.
+
 ### 2026-11-16 · Swarm robots flock with a head (Keith: "they don't seem to have a head ... don't swarm like a flock"; Claude)
 - **Small robots** (enemy scrappers and the summoner's scrap swarm, one sim: `src/combat/robots.ts`): a runner turns its head to its run (300°/s) and its run bends after the head (carve), so packs carve arcs instead of sliding; boids cohesion (toward the neighbours' middle) joins the separation and alignment (0.35 → 0.5); a slow flow field over the ground (the weave, ±35°, 7 s, 40 m) swings a whole pack's way in together. Cohesion, carve, weave and part of the alignment fade out within ~20 m of the target so they still spread to surround and latch. Facing a foe they bite. Sliders: Robots › Flock: … (8 new). No new state columns (worker-safe: a sim clock scalar).
 - **Scrap swarm at home** (`src/summon/allies.ts`): follows a leader point circling behind the mech (Scrap swarm › At home: flock circles at, 3 m/s; 0 is the old standing cloud), easing into their spots (Slow arriving within, 5 m) instead of standing frozen.
