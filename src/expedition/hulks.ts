@@ -31,7 +31,7 @@ export const HULK_DEFAULTS = {
   pullMech: 1.5,
   pullHand: 4,
   hulkReachMech: 8,
-  hulkReachPilot: 3.5,
+  hulkReachPilot: 5,
   jamScrap: 0.5,
   hulkForget: 600,
 };
@@ -129,11 +129,11 @@ export class Hulks {
   /** Parts left to pull off this hulk (0 when picked clean, jammed or gone). */
   left(id: string) { const h = this.list.find((q) => q.id === id); return h && !h.jammed ? h.parts.length : 0; }
 
-  /** The nearest hulk with parts left in reach of (x, z), or null. */
-  nearest(x: number, z: number, reach: number): Hulk | null {
+  /** The nearest hulk with parts left in reach of (x, z), or null; jammed: jammed ones count too (to look at). */
+  nearest(x: number, z: number, reach: number, jammed = false): Hulk | null {
     let best: Hulk | null = null, bd = reach;
     for (const h of this.list) {
-      if (h.jammed || !h.parts.length) continue;
+      if ((h.jammed && !jammed) || !h.parts.length) continue;
       const d = Math.hypot(h.x - x, h.z - z);
       if (d <= bd) { bd = d; best = h; }
     }
