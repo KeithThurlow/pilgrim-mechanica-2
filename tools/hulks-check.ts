@@ -65,6 +65,7 @@ if (h.jammed) {
   must(!!jam && jam.type === "jammed" && (h.parts.length === 0 || jam.scrap > 0), "a jam with parts left paid no scrap");
   must(!hs.begin(h, h.parts[0] ?? f0[0]!, false), "a jammed hulk let a pull start");
   must(hs.nearest(0, 0, 50) === null, "nearest() offered a jammed hulk");
+  must(h.parts.length === 0 || hs.nearest(0, 0, 50, true) === h, "a jammed hulk can't be found to look at");
 }
 // Seeded: the same outcome twice.
 const run = () => {

@@ -39,6 +39,8 @@ export class FieldMechs {
   dangerAt: ((x: number, z: number) => number) | null = null;
   /** Lab: every mech put on the field is destroyed at once (`?hulk`, a hulk to salvage). */
   killOnPut = false;
+  /** A wreck with salvage left on it (its key): kept on the field when its camp goes quiet (the loop sets it). */
+  keepWreck: ((key: string) => boolean) | null = null;
   private slots: Slot[] = [];
   /** Camp guards killed this trip (they don't come back). */
   private dead = new Set<string>();
@@ -100,7 +102,7 @@ export class FieldMechs {
     // Camp guards: wanted for camps on the field (not asleep), nearest first.
     this.bandits.liveCamps(this.camps);
     this.camps.sort((a, b) => Math.hypot(a.camp.x - P.x, a.camp.z - P.z) - Math.hypot(b.camp.x - P.x, b.camp.z - P.z));
-    for (const s of this.slots) if (s.camp && !s.pending && !this.camps.some((c) => c.camp.id === s.camp!.id && c.state !== "asleep")) this.free(s);
+    for (const s of this.slots) if (s.camp && !s.pending && !(s.rival.placed && !s.rival.alive && s.key && this.keepWreck?.(s.key)) && !this.camps.some((c) => c.camp.id === s.camp!.id && c.state !== "asleep")) this.free(s);
     for (const { camp: c, state } of this.camps) {
       if (state === "asleep") continue;
       const dg = Math.max(c.danger, this.dangerAt?.(c.x, c.z) ?? 0);

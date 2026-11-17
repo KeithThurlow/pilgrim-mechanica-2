@@ -820,6 +820,7 @@ selector = new Selector(app, {
     { topic: "quests", label: "Contracts: beacons, hulk, pods", objects: () => (loop.quests.draw ? loop.quests.draw.group.children : []) },
     { topic: "quests", label: "High value target", objects: () => loop.quests.hvt.objects() },
     { topic: "loot", label: "Loot drops", objects: () => [loop.loot.draw.group, loop.loot.clumps.group] },
+    { topic: "loot", label: "Mech hulk (salvage)", objects: () => [loop.hulksGroup] },
     { topic: "pois", label: "Salvage spots", objects: () => loop.sites.fx.objects() },
     { topic: "swarms", label: "Robots", objects: () => loop.swarms.draw.group.children },
     { topic: "raiders", label: "Bandits", objects: () => loop.banditCamps.draw.group.children },

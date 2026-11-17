@@ -13,6 +13,8 @@ export interface SalvageView {
   /** The part being pulled and how far along (0..1). */
   pulling: { item: Item; share: number } | null;
   onFoot: boolean;
+  /** A pull failed: nothing more comes off (the parts are shown, stuck). */
+  jammed?: boolean;
   fitted: readonly (Item | null)[];
   /** Cells left in the cargo (a pulled part that doesn't fit is laid on the sand). */
   full: (item: Item) => boolean;
@@ -66,9 +68,11 @@ export class SalvagePanel {
     this.rows = v.rows;
     const head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">`
       + `<b style="color:#ffb347">${v.title}</b><span data-act="close" style="cursor:pointer;padding:0 4px">✕</span></div>`
-      + `<div style="color:#9a958c;margin-bottom:6px">${v.pulls === 0 ? "First pull is the safe one: take what you want most." : `${v.pulls} pulled · a failed pull jams it`}`
+      + (v.jammed ? `<div style="color:#ff8a6a;font-weight:700;margin-bottom:6px">JAMMED: a pull failed, nothing more comes off. What's left paid out as scrap.</div>` : "")
+      + `<div style="color:#9a958c;margin-bottom:6px">${v.jammed ? "Stuck on it:" : v.pulls === 0 ? "First pull is the safe one: take what you want most." : `${v.pulls} pulled · a failed pull jams it`}`
       + ` · ${v.onFoot ? "by hand (slower, +chance)" : "by the mech (fast, loud)"}</div>`;
     const rows = v.rows.map((r, i) => {
+      if (v.jammed) return `<div style="display:flex;gap:8px;padding:5px 6px;margin:2px 0;opacity:0.45"><div style="flex:1;min-width:0">${labelHtml(r.item, v.fitted)}</div><div style="color:#ff8a6a">stuck</div></div>`;
       const busy = v.pulling?.item === r.item, kind = SLOT_KIND_NAMES[r.item.kind] ?? r.item.kind;
       return `<div data-act="pull" data-i="${i}" style="display:flex;gap:8px;align-items:center;padding:5px 6px;margin:2px 0;border-radius:4px;cursor:pointer;`
         + `background:${busy ? "rgba(255,179,71,0.18)" : "rgba(255,255,255,0.04)"}">`
